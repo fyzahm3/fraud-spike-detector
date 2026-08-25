@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# Secret-scan pre-commit hook (Section 4 of the build plan).
+#
+# Installed via: git config core.hooksPath scripts/hooks   (already done once;
+# re-run after cloning). Blocks any commit adding likely secrets to tracked
+# *.py / *.ipynb / config files. This is a heuristic fallback; if gitleaks or
+# trufflehog is installed, prefer running them too:
+#   gitleaks detect --no-banner -r /dev/null || gitleaks detect
+set -euo pipefail
+
+PATTERN='(api[_-]?key|secret|token|password|passwd)[[:space:]]*[=:][[:space:]]*["'\''][A-Za-z0-9_-]{16,}["'\'']'
+
+# Scan staged additions only (lines starting with '+' in the diff).
+MATCHES="$(git diff --cached --unified=0 -- '*.py' '*.ipynb' '*.yaml' '*.yml' '*.json' '*.sh' \
+    | grep '^+' | grep -vE '^\+\+\+' \
+    | grep -Ein "${PATTERN}" || true)"
+
+if [[ -n "${MATCHES}" ]]; then
+    echo "----------------------------------------------------------" >&2
+    echo "COMMIT BLOCKED: possible secret(s) in staged changes:" >&2
+    echo "${MATCHES}" >&2
+    echo "If this is a false positive, commit with --no-verify" >&2
+    echo "(and say why out loud first)." >&2
+    echo "----------------------------------------------------------" >&2
+    exit 1
+fi
+exit 0

@@ -1,0 +1,28 @@
+# ---- Secrets / credentials (NEVER commit) ----
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+**/credentials.json
+**/kaggle.json
+
+# ---- Data (large, re-downloadable) ----
+data/raw/
+*.sqlite
+*.db
+
+# ---- Python artifacts ----
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# ---- Notebooks ----
+.ipynb_checkpoints/
+
+# ---- OS junk ----
+.DS_Store

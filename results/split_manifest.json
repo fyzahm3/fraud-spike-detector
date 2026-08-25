@@ -1,0 +1,27 @@
+{
+  "split_rule": "chronological by TransactionDT: first 70% train, next 15% validation, last 15% held-out test; boundaries snapped past tied timestamps",
+  "splits": {
+    "train": {
+      "n_rows": 413378,
+      "n_fraud": 14538,
+      "transaction_dt_min": 86400,
+      "transaction_dt_max": 10437996,
+      "sha256": "ec64a6b2e444ee4007c03d2c04098efdbfb71259d956243e1798e368a45a6869"
+    },
+    "validation": {
+      "n_rows": 88581,
+      "n_fraud": 3042,
+      "transaction_dt_min": 10438003,
+      "transaction_dt_max": 13151840,
+      "sha256": "9383869cfdcd7e1dc64d714fd1c54c34b29aab062f6a96e61ad420867bd67bd8"
+    },
+    "test": {
+      "n_rows": 88581,
+      "n_fraud": 3083,
+      "transaction_dt_min": 13151880,
+      "transaction_dt_max": 15811131,
+      "sha256": "c2d140a30b2bbe62fd31667eacf48924dd097da8f951db747006520300a08a23"
+    }
+  },
+  "source": "data/raw"
+}

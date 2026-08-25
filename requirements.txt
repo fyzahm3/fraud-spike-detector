@@ -1,0 +1,6 @@
+# Pinned for reproducibility. Python >= 3.12 recommended.
+numpy==2.5.2
+pandas==3.0.5
+scikit-learn==1.9.0
+scipy==1.18.1
+pytest==9.1.1
