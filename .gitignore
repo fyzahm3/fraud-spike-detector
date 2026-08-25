@@ -12,6 +12,9 @@ data/raw/
 *.sqlite
 *.db
 
+# ---- Trained model artifacts ----
+/artifacts/
+
 # ---- Python artifacts ----
 __pycache__/
 *.pyc

@@ -101,6 +101,33 @@ def write_manifest(manifest: dict, path: Path | str) -> None:
     out.write_text(json.dumps(manifest, indent=2))
 
 
+class SplitIntegrityError(RuntimeError):
+    """Raised when a split's contents no longer match the recorded manifest."""
+
+
+def verify_against_manifest(manifest_path: Path | str,
+                            splits: dict[str, pd.DataFrame]) -> None:
+    """Assert each split's checksum matches the manifest written at split time.
+
+    This is the held-out-set guard: evaluation refuses to run against a test
+    set whose bytes differ from what was fixed when the split was created.
+    """
+    manifest = json.loads(Path(manifest_path).read_text())
+    errors = []
+    for name, df in splits.items():
+        recorded = manifest.get("splits", {}).get(name)
+        if recorded is None:
+            errors.append(f"{name}: missing from manifest")
+            continue
+        actual = checksum_dataframe(df)
+        if actual != recorded["sha256"]:
+            errors.append(
+                f"{name}: checksum mismatch (manifest={recorded['sha256'][:12]}… "
+                f"actual={actual[:12]}…) — data changed since the split was made")
+    if errors:
+        raise SplitIntegrityError("; ".join(errors))
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Time-based split of IEEE-CIS transactions + leakage manifest.")
