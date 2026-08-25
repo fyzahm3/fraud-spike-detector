@@ -77,8 +77,9 @@ def build_manifest(train: pd.DataFrame, val: pd.DataFrame, test: pd.DataFrame,
     """Checksummed summary of each split — the leakage-audit artifact."""
     manifest: dict = {
         "split_rule": "chronological by TransactionDT: first 70% train, "
-                      "next 15% validation, last 15% held-out test; boundaries "
-                      "snapped past tied timestamps",
+                      "next 15% validation, last 15% held-out test; each "
+                      "boundary snapped to the nearest edge of its "
+                      "tied-timestamp block",
         "splits": {},
     }
     if source_path:
