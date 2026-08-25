@@ -18,11 +18,7 @@ from pathlib import Path
 import numpy as np
 import xgboost as xgb
 
-from ..features.preprocess import (
-    build_features,
-    fit_categorical_vocab,
-    join_identity,
-)
+from ..features.pipeline import build_model_frames
 
 SEED = 42
 N_THREADS = 4  # fixed for bit-reproducible runs across invocations
@@ -70,25 +66,14 @@ def compute_scale_pos_weight(y_train: np.ndarray) -> float:
     return neg / pos
 
 
-def train_baseline(train_transactions, train_identity,
-                   val_transactions, val_identity,
+def fit_and_select(X_tr, y_tr, X_va, y_va,
                    max_rounds: int = MAX_ROUNDS,
                    verbose: bool = True) -> tuple[xgb.XGBClassifier, dict]:
-    """Fit on train, select config+threshold on validation, return both."""
-    # Join first so the categorical vocabulary covers merged identity fields.
-    train_joined = join_identity(train_transactions, train_identity)
-    val_joined = join_identity(val_transactions, val_identity)
-
-    # Vocabulary fitted on TRAIN alone; unseen validation/test categories
-    # become NaN and flow through XGBoost's learned default direction.
-    vocab = fit_categorical_vocab(train_joined)
-    X_tr, y_tr = build_features(train_joined)
-    X_va, y_va = build_features(val_joined, vocab=vocab)
-
-    spw = compute_scale_pos_weight(y_tr.to_numpy())
+    """Search configs + threshold on validation. Operates on ready matrices."""
+    y_tr = np.asarray(y_tr)
+    y_va = np.asarray(y_va)
+    spw = compute_scale_pos_weight(y_tr)
     params = base_params(spw)
-    cat_cols = [c for c in X_tr.columns
-                if str(X_tr[c].dtype) in ("category",)]
 
     best_model, best_cfg, best_aucpr = None, None, -1.0
     for cfg in sample_configs(N_CONFIGS):
@@ -106,8 +91,8 @@ def train_baseline(train_transactions, train_identity,
 
     val_proba = best_model.predict_proba(X_va)[:, 1]
     from .metrics import classification_metrics, select_threshold_on_validation
-    threshold = select_threshold_on_validation(val_proba, y_va.to_numpy())
-    val_metrics = classification_metrics(y_va.to_numpy(), val_proba, threshold)
+    threshold = select_threshold_on_validation(val_proba, y_va)
+    val_metrics = classification_metrics(y_va, val_proba, threshold)
 
     meta = {
         "model": "xgboost.XGBClassifier (hist)",
@@ -128,21 +113,46 @@ def train_baseline(train_transactions, train_identity,
     return best_model, meta
 
 
+def train_baseline(train_transactions, train_identity,
+                   val_transactions, val_identity,
+                   max_rounds: int = MAX_ROUNDS,
+                   verbose: bool = True,
+                   use_graph: bool = False) -> tuple[xgb.XGBClassifier, dict]:
+    """Featurize splits causally, then fit+select on validation only."""
+    frames = build_model_frames(
+        train_transactions, train_identity,
+        val_transactions, val_identity,
+        use_graph=use_graph)
+    X_tr, y_tr = frames["train"]
+    X_va, y_va = frames["validation"]
+
+    model, meta = fit_and_select(X_tr, y_tr, X_va, y_va,
+                                 max_rounds=max_rounds, verbose=verbose)
+    meta["variant"] = "graph" if use_graph else "baseline"
+    return model, meta
+
+
 def save_artifacts(model: xgb.XGBClassifier, meta: dict,
-                   out_dir: Path | str = "artifacts") -> None:
+                   out_dir: Path | str = "artifacts",
+                   name: str = "baseline_model") -> None:
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    model.save_model(out_dir / "baseline_model.json")
-    (out_dir / "baseline_meta.json").write_text(json.dumps(meta, indent=2))
+    model.save_model(out_dir / f"{name}.json")
+    meta["artifact"] = name
+    (out_dir / f"{name.replace('_model', '_meta')}.json").write_text(
+        json.dumps(meta, indent=2))
 
 
-def load_artifacts(in_dir: Path | str = "artifacts"
+def load_artifacts(in_dir: Path | str = "artifacts",
+                   name: str = "baseline_model"
                    ) -> tuple[xgb.XGBClassifier, dict]:
     in_dir = Path(in_dir)
-    model_path, meta_path = in_dir / "baseline_model.json", in_dir / "baseline_meta.json"
+    model_path, meta_path = (in_dir / f"{name}.json",
+                             in_dir / f"{name.replace('_model', '_meta')}.json")
     if not model_path.exists() or not meta_path.exists():
         raise FileNotFoundError(
-            f"trained artifacts not found under '{in_dir}' — run train.py first")
+            f"trained artifacts '{name}.*' not found under '{in_dir}' — "
+            "run train.py first")
     model = xgb.XGBClassifier()
     model.load_model(model_path)
     meta = json.loads(meta_path.read_text())

@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
-"""Train the Phase-1 baseline model.
+"""Train the fraud-risk model (Phase 1 baseline or Phase 2 graph variant).
 
 Usage:
     python train.py [--data-dir data/raw] [--artifacts-dir artifacts]
+                    [--no-graph] [--manifest-out results/split_manifest.json]
 
 Pipeline: load -> time-based split (refreshes the checksum manifest) ->
-train on train split with validation-only tuning -> save artifacts.
+causal featurization (graph features computed over the full chronological
+stream, strictly-past only) -> train on train split with validation-only
+tuning -> save artifacts.
+
 The held-out test split is checksummed for the manifest but is NOT passed to
 any training function (structural guarantee — see src/models/train.py).
 """
@@ -24,7 +28,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--data-dir", default="data/raw")
     parser.add_argument("--artifacts-dir", default="artifacts")
     parser.add_argument("--manifest-out", default="results/split_manifest.json")
+    parser.add_argument("--no-graph", action="store_true",
+                        help="train the Phase-1 baseline without graph features")
     args = parser.parse_args(argv)
+    use_graph = not args.no_graph
 
     print("Loading data ...")
     transactions, identity = load_dataset(args.data_dir, "train")
@@ -38,16 +45,19 @@ def main(argv: list[str] | None = None) -> int:
                    args.manifest_out)
     print(f"Manifest refreshed at {args.manifest_out}")
 
-    print("Training (tuning on validation only) ...")
-    model, meta = train_baseline(train_tx, id_train, val_tx, id_val)
-    save_artifacts(model, meta, args.artifacts_dir)
+    variant = "graph" if use_graph else "baseline"
+    print(f"Training [{variant}] (tuning on validation only) ...")
+    model, meta = train_baseline(train_tx, id_train, val_tx, id_val,
+                                 use_graph=use_graph)
+    save_artifacts(model, meta, args.artifacts_dir,
+                   name=f"{variant}_model")
 
     m = meta["validation_metrics"]
     print(f"\nDone. best_config={meta['best_config']}")
     print(f"validation @ threshold {m['threshold']:.6f}: "
           f"precision={m['precision']:.4f} recall={m['recall']:.4f} "
           f"F1={m['f1']:.4f} AUC-ROC={m['auc_roc']:.4f} AUC-PR={m['auc_pr']:.4f}")
-    print(f"Artifacts written to {args.artifacts_dir}/")
+    print(f"Artifacts written to {args.artifacts_dir}/{variant}_model.*")
     return 0
 
 

@@ -1,0 +1,58 @@
+{
+  "variant": "graph",
+  "model": "xgboost.XGBClassifier (hist)",
+  "seed": 42,
+  "xgboost_version": "3.4.1",
+  "n_features": 443,
+  "scale_pos_weight": 27.434310083918007,
+  "best_iteration": 872,
+  "best_config": {
+    "learning_rate": 0.05,
+    "max_depth": 6,
+    "min_child_weight": 50.0,
+    "subsample": 0.8,
+    "colsample_bytree": 0.7
+  },
+  "test_split_sha256": "c2d140a30b2bbe62fd31667eacf48924dd097da8f951db747006520300a08a23",
+  "validation": {
+    "threshold": 0.7878516297466625,
+    "precision": 0.7585227272727273,
+    "recall": 0.6143984220907298,
+    "f1": 0.67889575009081,
+    "auc_roc": 0.9498765414676915,
+    "auc_pr": 0.7164573011900484,
+    "confusion_matrix": {
+      "tn": 84944,
+      "fp": 595,
+      "fn": 1173,
+      "tp": 1869
+    },
+    "n_flagged": 2464,
+    "n_rows": 88581
+  },
+  "test": {
+    "threshold": 0.7878516297466625,
+    "precision": 0.7106299212598425,
+    "recall": 0.5854686993188453,
+    "f1": 0.6420060465943447,
+    "auc_roc": 0.9364418897849267,
+    "auc_pr": 0.6732187661505642,
+    "confusion_matrix": {
+      "tn": 84763,
+      "fp": 735,
+      "fn": 1278,
+      "tp": 1805
+    },
+    "n_flagged": 2540,
+    "n_rows": 88581
+  },
+  "costs": {
+    "false_positive_count": 735,
+    "legitimate_value_disrupted": 117704.199,
+    "true_positive_count": 1805,
+    "fraud_value_caught": 238781.618,
+    "missed_count": 1278,
+    "fraud_value_missed": 230826.90300000002,
+    "caught_to_disrupted_ratio": 2.0286584508340266
+  }
+}
