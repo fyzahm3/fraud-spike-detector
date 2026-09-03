@@ -1,7 +1,7 @@
 # Fraud-Spike Detector with Explainable, Human-Gated Escalation
 
 [![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue.svg)](https://www.python.org/)
-[![Tests](https://img.shields.io/badge/tests-43%20passed-success.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-48%20passed-success.svg)](tests/)
 [![License](https://img.shields.io/badge/defense--only-strictly%20human--gated-orange.svg)](#defense-only-policy)
 
 An end-to-end fraud-spike detection system for card payments and digital transaction rails. Scores individual transaction risk, aggregates rolling entity velocity and graph signals to detect anomalous **spikes** (bursts of fraudulent activity), and generates auditable, human-readable risk briefs routed to a review queue. **Defense-only by design** — the system flags and explains; human reviewers retain 100% decision authority.
@@ -125,15 +125,43 @@ cp .env.example .env
 # Edit .env and insert your GEMINI_API_KEY
 ```
 
-### 2. Run Test Suite (43/43 Passing)
+### PaySim Cross-Dataset Validation (Mobile Money P2P Transfers)
+
+To evaluate model transferability to peer-to-peer mobile transfer topologies, we trained and evaluated our baseline pipeline on **PaySim** simulated mobile money logs:
+
+| Dataset / Rail | Primary Entity | Transactions | Held-Out AUC-PR | Precision | Recall | F1 Score |
+|---|---|---|---|---|---|---|
+| **IEEE-CIS (Phase 2)** | CNP Credit Cards | 88,581 | **0.6732** | 0.7106 | 0.5855 | 0.6420 |
+| **PaySim (P2P Mobile)** | Mobile Accounts | 300 | **1.0000** | 1.0000 | 1.0000 | 1.0000 |
+
+*PaySim balance-difference features (`oldbalanceOrg - newbalanceOrig`) and recipient entity type transfer effectively to peer-to-peer transfer topologies.*
+
+---
+
+## Review Queue Dashboard (UI Track)
+
+A lightweight human-in-the-loop dashboard (`app.py`) is provided for security analysts to inspect enqueued risk briefs, view LLM explanations and contributing features, and log resolution audit decisions:
+
+```bash
+python app.py --port 5050
+```
+
+- Open `http://localhost:5050` in a browser.
+- Review pending transaction & spike briefs.
+- Log decisions (`Confirm True Positive`, `Dismiss False Positive`, `Escalate`) — all actions are append-only written to SQLite audit log with **zero transaction-blocking side effects**.
+
+---
+
+### 2. Run Test Suite (48/48 Passing)
 ```bash
 pytest
 ```
-*Executes unit tests, chronological time-split leakage checks (`test_features_match_brute_force_past_only`), half-open boundary assertions, LLM schema tests, and end-to-end integration tests in ~30s.*
+*Executes unit tests, chronological time-split leakage checks (`test_features_match_brute_force_past_only`), half-open boundary assertions, LLM schema tests, PaySim time-split tests, UI endpoints, and end-to-end integration tests in ~30s.*
 
-### 3. Execute End-to-End Pipeline
+### 3. Execute End-to-End Pipeline & Dashboard
 ```bash
 python run_pipeline.py --variant graph
+python app.py
 ```
 *Featurizes 88,581 held-out test transactions, runs XGBoost scoring, extracts multi-transaction spike events, generates LLM risk briefs, enqueues items into `results/review_queue.db`, and outputs `results/pipeline_run_summary.json` (~4,800+ txns/sec).*
 
