@@ -225,7 +225,14 @@ Roughly a 20-minute path, most of it waiting on the first build.
 
 - The instance **sleeps when idle**; the first request after a quiet period takes **30–50 seconds** to wake. Load the URL once immediately before recording the pitch video.
 - Resolutions made in the demo are real writes to real SQLite, but **reset to the committed snapshot on each redeploy**.
-- **Measured intermittent unavailability.** Probing the live instance on 2026-09-04, roughly **40% of requests returned HTTP 404 with the header `x-render-routing: no-server`** — Render's edge reporting no running backend for that request. It affects every path equally, including `/health`, and the application responds correctly whenever a request actually reaches it (`/health` → 200, `/` → 401, authenticated `/api/pending` → 30 items). This is instance availability on the free plan, not an application fault. Diagnose it in the Render dashboard under **Logs** and **Events** (look for restarts, OOM kills, or a second stale service bound to the same name). If it persists, the paid Starter plan removes the sleep/spin-down behaviour entirely — and for a recorded demo, a local `gunicorn` run against the same committed snapshot is a legitimate fallback that shows identical data.
+- **Expect `no-server` 404s while a deploy is settling.** During the first deploy on 2026-09-04, roughly 40% of requests returned HTTP 404 with `x-render-routing: no-server` — Render's edge reporting no running backend. It affected every path including `/health`, while the application answered correctly whenever a request reached it. It cleared once the deploy finished: a follow-up probe of 30 requests across `/health`, `/`, and `/api/pending` returned the expected code **30/30**, at ~160ms, with the origin reporting `x-render-origin-server: gunicorn`. So treat `no-server` as "deploy still cycling", not as an application fault — but **don't start recording until a probe comes back clean**:
+
+  ```bash
+  for i in $(seq 1 20); do curl -s -o /dev/null -w "%{http_code} " \
+    https://fraud-spike-review-queue.onrender.com/health; done; echo
+  ```
+
+  Twenty `200`s means the instance is settled. If `no-server` persists well past a deploy, check the Render dashboard's **Logs** and **Events** tabs for restarts or OOM kills.
 
 Railway works the same way via the [`Procfile`](Procfile); set the same environment variables in its dashboard. No Dockerfile is included — neither platform needs one for a Flask app, and it would only add surface area to maintain.
 
