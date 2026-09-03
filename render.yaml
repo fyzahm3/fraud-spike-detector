@@ -11,6 +11,9 @@
 #     writes to a real SQLite file, but they reset to the committed snapshot on
 #     every redeploy. That is intentional for a demo instance.
 #   - Instances sleep when idle; the first request after a sleep takes ~30-50s.
+#   - One worker, not two: the free instance has 512MB and 0.1 CPU, and this
+#     app is I/O-bound on SQLite. Threads give the concurrency; a second worker
+#     process would just duplicate the interpreter for no throughput gain.
 services:
   - type: web
     name: fraud-spike-review-queue
@@ -18,7 +21,7 @@ services:
     plan: free
     region: singapore
     buildCommand: pip install -r requirements-web.txt
-    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --threads 4 --timeout 60 --access-logfile -
+    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 1 --threads 8 --timeout 60 --access-logfile -
     healthCheckPath: /health
     envVars:
       - key: PYTHON_VERSION

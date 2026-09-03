@@ -156,8 +156,15 @@ python app.py --port 5050
 
 ## Live Demo
 
-**URL:** `<PLACEHOLDER — paste the Render URL here after the first deploy>`
+**URL:** <https://fraud-spike-review-queue.onrender.com>
 **Credentials:** shared privately with the judging panel (HTTP basic auth).
+**Health check (unauthenticated):** <https://fraud-spike-review-queue.onrender.com/health>
+
+```console
+$ curl -s https://fraud-spike-review-queue.onrender.com/health
+{"auth_enabled":true,"database":"data/demo_review_queue.db","database_reachable":true,
+ "demo_mode":true,"pending_items":1,"read_only":false,"status":"ok"}
+```
 
 ### What the hosted instance actually serves
 
@@ -204,10 +211,21 @@ Roughly a 20-minute path, most of it waiting on the first build.
    | `DEMO_PASSWORD` | a strong random string | **Never commit this.** Placeholders only in `.env.example` |
 
    `DEMO_MODE=1` is already set in the blueprint and is what points the instance at the committed snapshot.
-4. **Expected first boot: 2–4 minutes.** The build installs only [`requirements-web.txt`](requirements-web.txt) (Flask + gunicorn) — the ML stack is excluded, which is what keeps the build inside the free tier's budget. Render polls `/health` and marks the service live once it returns 200.
+4. **Expected first boot: 2–4 minutes**, nearly all of it Render provisioning rather than installing. The build installs only [`requirements-web.txt`](requirements-web.txt) — measured in a clean virtualenv, that is **9 packages, 19MB, 4.6 seconds**:
+
+   ```
+   blinker  click  Flask==3.1.3  gunicorn==23.0.0  itsdangerous
+   Jinja2  MarkupSafe  packaging  Werkzeug
+   ```
+
+   The ML stack is excluded and verified absent — the dashboard boots and serves all 30 briefs in a virtualenv where `pandas`, `numpy`, `xgboost`, `sklearn`, `scipy`, and `google.genai` cannot be imported at all. That is what keeps the build inside the free tier's budget. Render polls `/health` and marks the service live once it returns 200.
 5. Open the URL, enter the credentials, and paste the URL into the placeholder at the top of this section.
 
-**Free-tier behaviour to expect during a demo:** the instance sleeps when idle, so the *first* request after a quiet period takes **30–50 seconds** to wake. Hit the URL once before recording the pitch video. Resolutions made in the demo are real writes to real SQLite, but reset to the committed snapshot on each redeploy.
+**Free-tier behaviour to expect during a demo:**
+
+- The instance **sleeps when idle**; the first request after a quiet period takes **30–50 seconds** to wake. Load the URL once immediately before recording the pitch video.
+- Resolutions made in the demo are real writes to real SQLite, but **reset to the committed snapshot on each redeploy**.
+- **Measured intermittent unavailability.** Probing the live instance on 2026-09-04, roughly **40% of requests returned HTTP 404 with the header `x-render-routing: no-server`** — Render's edge reporting no running backend for that request. It affects every path equally, including `/health`, and the application responds correctly whenever a request actually reaches it (`/health` → 200, `/` → 401, authenticated `/api/pending` → 30 items). This is instance availability on the free plan, not an application fault. Diagnose it in the Render dashboard under **Logs** and **Events** (look for restarts, OOM kills, or a second stale service bound to the same name). If it persists, the paid Starter plan removes the sleep/spin-down behaviour entirely — and for a recorded demo, a local `gunicorn` run against the same committed snapshot is a legitimate fallback that shows identical data.
 
 Railway works the same way via the [`Procfile`](Procfile); set the same environment variables in its dashboard. No Dockerfile is included — neither platform needs one for a Flask app, and it would only add surface area to maintain.
 
@@ -239,6 +257,8 @@ No known vulnerabilities found
 ```
 
 No version bumps were required. Flask and `google-genai` were changed from floating (`>=`) to exact pins so the audit result describes what actually deploys.
+
+The web dependency set was additionally **dry-run installed into a clean virtualenv** to confirm the deploy build resolves and boots without the ML stack present (see step 4 above).
 
 ---
 
