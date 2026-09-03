@@ -1,0 +1,17 @@
+{
+  "variant": "graph",
+  "total_rows_scored": 88581,
+  "total_flagged_transactions": 2540,
+  "total_spikes_detected": 450,
+  "scoring_duration_seconds": 18.1161,
+  "throughput_txns_per_sec": 4889.64,
+  "risk_threshold": 0.7878516297466625,
+  "enqueued_briefs_count": 30,
+  "sample_queue_ids": [
+    1,
+    2,
+    3,
+    4,
+    5
+  ]
+}
