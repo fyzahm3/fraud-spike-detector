@@ -100,7 +100,7 @@ The primary dataset used in this project is IEEE-CIS Fraud Detection, which cons
 This system is strictly **defense-only by design**:
 
 - **Zero Blocking Code**: The codebase contains no calls, SDKs, or interfaces capable of blocking, cancelling, holding funds, or executing financial transactions.
-- **Code-Level Verification**: Automated AST test suite (`tests/test_explain.py::test_no_blocking_side_effects`) scans source files to verify no forbidden transaction-modification imports exist.
+- **Code-Level Verification**: Automated tests enforce this rather than policy alone. `tests/test_explain.py::test_no_blocking_side_effects` asserts `ReviewQueue`'s public API is exactly `{enqueue, list_pending, resolve, get_audit_log}` — so it cannot grow an action-capable method unnoticed — and source-scans `src/explain/*.py` for forbidden action terms (`block_card`, `cancel_transaction`, `hold_funds`, `execute_payment`, `chargeback`). `tests/test_ui.py::test_ui_no_blocking_payment_actions` applies the same scan to the dashboard.
 - **Human Authority**: The LLM explainer generates structured risk briefs and recommendations (`"hold_for_review"`, `"monitor"`), but **human analysts retain 100% decision authority** via the append-only SQLite review queue.
 
 ---
@@ -125,16 +125,18 @@ cp .env.example .env
 # Edit .env and insert your GEMINI_API_KEY
 ```
 
-### PaySim Cross-Dataset Validation (Mobile Money P2P Transfers)
+### 2. Run Test Suite (48/48 Passing)
+```bash
+pytest
+```
+*Executes unit tests, chronological time-split leakage checks (`test_features_match_brute_force_past_only`), half-open boundary assertions, LLM schema tests, PaySim split-logic tests, UI endpoints, and end-to-end integration tests in ~30s.*
 
-To evaluate model transferability to peer-to-peer mobile transfer topologies, we trained and evaluated our baseline pipeline on **PaySim** simulated mobile money logs:
-
-| Dataset / Rail | Primary Entity | Transactions | Held-Out AUC-PR | Precision | Recall | F1 Score |
-|---|---|---|---|---|---|---|
-| **IEEE-CIS (Phase 2)** | CNP Credit Cards | 88,581 | **0.6732** | 0.7106 | 0.5855 | 0.6420 |
-| **PaySim (P2P Mobile)** | Mobile Accounts | 300 | **1.0000** | 1.0000 | 1.0000 | 1.0000 |
-
-*PaySim balance-difference features (`oldbalanceOrg - newbalanceOrig`) and recipient entity type transfer effectively to peer-to-peer transfer topologies.*
+### 3. Execute End-to-End Pipeline & Dashboard
+```bash
+python run_pipeline.py --variant graph
+python app.py
+```
+*Featurizes 88,581 held-out test transactions, runs XGBoost scoring, extracts multi-transaction spike events, generates LLM risk briefs, enqueues items into `results/review_queue.db`, and outputs `results/pipeline_run_summary.json` (~4,800+ txns/sec).*
 
 ---
 
@@ -149,21 +151,6 @@ python app.py --port 5050
 - Open `http://localhost:5050` in a browser.
 - Review pending transaction & spike briefs.
 - Log decisions (`Confirm True Positive`, `Dismiss False Positive`, `Escalate`) — all actions are append-only written to SQLite audit log with **zero transaction-blocking side effects**.
-
----
-
-### 2. Run Test Suite (48/48 Passing)
-```bash
-pytest
-```
-*Executes unit tests, chronological time-split leakage checks (`test_features_match_brute_force_past_only`), half-open boundary assertions, LLM schema tests, PaySim time-split tests, UI endpoints, and end-to-end integration tests in ~30s.*
-
-### 3. Execute End-to-End Pipeline & Dashboard
-```bash
-python run_pipeline.py --variant graph
-python app.py
-```
-*Featurizes 88,581 held-out test transactions, runs XGBoost scoring, extracts multi-transaction spike events, generates LLM risk briefs, enqueues items into `results/review_queue.db`, and outputs `results/pipeline_run_summary.json` (~4,800+ txns/sec).*
 
 ---
 
@@ -185,7 +172,7 @@ python app.py
 │   ├── models/                   # XGBoost training, thresholding & cost metrics
 │   ├── spike/                    # Phase 3 SpikeScorer (1h/24h) & SpikeEvent detection
 │   └── explain/                  # Phase 4 RiskBrief generator & SQLite ReviewQueue
-├── tests/                        # 43 unit, leakage, and integration tests
+├── tests/                        # 48 unit, leakage, and integration tests
 └── results/                      # Committed metrics, manifests, and run summaries
 ```
 
@@ -197,3 +184,4 @@ python app.py
 2. **In-Memory Streaming State**: The causal graph builder and `SpikeScorer` maintain entity state in local Python `deque`s. Production at scale would deploy these algorithms on Apache Flink or Kafka Streams.
 3. **Static Windowing**: Rolling aggregation windows (1h and 24h) are fixed. Dynamic windowing based on per-merchant volatility profiles is a planned extension.
 4. **LLM API Network Latency**: External LLM calls add latency per brief generation; batch runs utilize clean fallback templates when API access is unconfigured.
+5. **No Cross-Dataset Validation**: Validation on a second payment rail (real mobile-money P2P data such as PaySim) was scoped but not completed within the build window. The repository therefore makes no cross-dataset transferability claim. `src/data/paysim_loader.py` retains only a placeholder generator used to exercise split/loader mechanics in tests — it produces fabricated rows, not real PaySim data, and is never used to produce reported metrics.
