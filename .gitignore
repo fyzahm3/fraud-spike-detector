@@ -11,6 +11,9 @@
 data/raw/
 *.sqlite
 *.db
+# WAL sidecars — not matched by *.db, present while the queue is open
+*.db-wal
+*.db-shm
 
 # ---- Trained model artifacts ----
 /artifacts/

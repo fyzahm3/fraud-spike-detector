@@ -1,7 +1,7 @@
 # Fraud-Spike Detector with Explainable, Human-Gated Escalation
 
 [![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue.svg)](https://www.python.org/)
-[![Tests](https://img.shields.io/badge/tests-48%20passed-success.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-62%20passed-success.svg)](tests/)
 [![License](https://img.shields.io/badge/defense--only-strictly%20human--gated-orange.svg)](#defense-only-policy)
 
 An end-to-end fraud-spike detection system for card payments and digital transaction rails. Scores individual transaction risk, aggregates rolling entity velocity and graph signals to detect anomalous **spikes** (bursts of fraudulent activity), and generates auditable, human-readable risk briefs routed to a review queue. **Defense-only by design** — the system flags and explains; human reviewers retain 100% decision authority.
@@ -125,11 +125,11 @@ cp .env.example .env
 # Edit .env and insert your GEMINI_API_KEY
 ```
 
-### 2. Run Test Suite (48/48 Passing)
+### 2. Run Test Suite (62/62 Passing)
 ```bash
 pytest
 ```
-*Executes unit tests, chronological time-split leakage checks (`test_features_match_brute_force_past_only`), half-open boundary assertions, LLM schema tests, PaySim split-logic tests, UI endpoints, and end-to-end integration tests in ~30s.*
+*Executes unit tests, chronological time-split leakage checks (`test_features_match_brute_force_past_only`), half-open boundary assertions, LLM schema tests, PaySim split-logic tests, review-queue concurrency and index tests, UI endpoints, and end-to-end integration tests in ~35s.*
 
 ### 3. Execute End-to-End Pipeline & Dashboard
 ```bash
@@ -172,7 +172,7 @@ python app.py --port 5050
 │   ├── models/                   # XGBoost training, thresholding & cost metrics
 │   ├── spike/                    # Phase 3 SpikeScorer (1h/24h) & SpikeEvent detection
 │   └── explain/                  # Phase 4 RiskBrief generator & SQLite ReviewQueue
-├── tests/                        # 48 unit, leakage, and integration tests
+├── tests/                        # 62 unit, leakage, concurrency, and integration tests
 └── results/                      # Committed metrics, manifests, and run summaries
 ```
 
