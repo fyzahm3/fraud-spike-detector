@@ -1,0 +1,9 @@
+# Web-only dependency set for the hosted dashboard (Render/Railway).
+#
+# app.py imports just Flask and src/explain/queue.py, which is stdlib sqlite3.
+# The ML stack (xgboost, pandas, numpy, scikit-learn, scipy) is NOT needed to
+# serve the committed demo snapshot and would push a free-tier build past its
+# time and disk budget, so it is deliberately excluded. Local development and
+# the test suite use the full requirements.txt.
+flask==3.1.3
+gunicorn==23.0.0

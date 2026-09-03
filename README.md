@@ -125,11 +125,11 @@ cp .env.example .env
 # Edit .env and insert your GEMINI_API_KEY
 ```
 
-### 2. Run Test Suite (62/62 Passing)
+### 2. Run Test Suite (70/70 Passing)
 ```bash
 pytest
 ```
-*Executes unit tests, chronological time-split leakage checks (`test_features_match_brute_force_past_only`), half-open boundary assertions, LLM schema tests, PaySim split-logic tests, review-queue concurrency and index tests, UI endpoints, and end-to-end integration tests in ~35s.*
+*Executes unit tests, chronological time-split leakage checks (`test_features_match_brute_force_past_only`), half-open boundary assertions, LLM schema tests, PaySim split-logic tests, review-queue concurrency and index tests, UI endpoints, deployment surface tests (health check, basic auth, read-only gating, demo-snapshot honesty), and end-to-end integration tests in ~35s.*
 
 ### 3. Execute End-to-End Pipeline & Dashboard
 ```bash
@@ -154,6 +154,94 @@ python app.py --port 5050
 
 ---
 
+## Live Demo
+
+**URL:** `<PLACEHOLDER — paste the Render URL here after the first deploy>`
+**Credentials:** shared privately with the judging panel (HTTP basic auth).
+
+### What the hosted instance actually serves
+
+The dashboard is deployed **on its own**, without the training or scoring pipeline. That is a deliberate constraint, not a shortcut: `run_pipeline.py` needs the ~650MB IEEE-CIS dataset plus the trained XGBoost artifacts, which do not fit a free hosting tier — and free tiers wipe the filesystem on every redeploy, so anything generated at boot would not survive anyway.
+
+So the hosted app reads **`data/demo_review_queue.db`**, a small committed SQLite snapshot.
+
+> **This snapshot is a captured demo artifact, not live data — and not synthetic data.**
+> Every brief in it was produced by scoring the **real IEEE-CIS held-out test split** with the **real trained model** (`scripts/seed_demo_db.py`). Full provenance for all 30 briefs — model scores, source transaction IDs, and ground-truth labels — is committed at [`results/demo_seed_provenance.json`](results/demo_seed_provenance.json). Nothing in the demo database is fabricated; see [Known Limitations](#known-limitations) for this project's standing position on synthetic results.
+
+### What is in the snapshot, and why
+
+The sample is **stratified rather than top-N by score**, because a demo showing only clean true positives misrepresents the system's real behaviour to a technical audience. As seeded:
+
+| Stratum | Count | Score range | Confidence |
+|---|---|---|---|
+| Spike events (multi-transaction) | 10 | 0.9993 – 1.0000 | medium |
+| High-scoring single transactions | 9 | 0.9066 – 1.0000 | medium |
+| Borderline single transactions | 11 | 0.7879 – 0.8741 | low |
+
+Against the held-out ground truth, those 30 briefs contain **9 true positives and 11 real false positives** — including transactions the model scored above 0.99 that are actually legitimate. That error surface is the point: it is what a reviewer's queue genuinely looks like at a threshold of 0.7879.
+
+Ground-truth labels are stored **only** in the provenance file, never in the database, so the dashboard shows a reviewer exactly what a reviewer would see.
+
+Regenerate the snapshot (requires the real dataset and artifacts locally):
+
+```bash
+python scripts/seed_demo_db.py --variant graph
+```
+
+The script **refuses to run** if the dataset or artifacts are missing rather than inventing plausible-looking briefs.
+
+### Deploy to Render
+
+Roughly a 20-minute path, most of it waiting on the first build.
+
+1. Push this repository to GitHub.
+2. On [dashboard.render.com](https://dashboard.render.com), click **New → Blueprint**, connect the repository, and select the branch. Render reads [`render.yaml`](render.yaml) and proposes the `fraud-spike-review-queue` web service — click **Apply**.
+3. Render prompts for the two variables marked `sync: false`. Set them:
+
+   | Variable | Value | Notes |
+   |---|---|---|
+   | `DEMO_USER` | your choice | Basic-auth username |
+   | `DEMO_PASSWORD` | a strong random string | **Never commit this.** Placeholders only in `.env.example` |
+
+   `DEMO_MODE=1` is already set in the blueprint and is what points the instance at the committed snapshot.
+4. **Expected first boot: 2–4 minutes.** The build installs only [`requirements-web.txt`](requirements-web.txt) (Flask + gunicorn) — the ML stack is excluded, which is what keeps the build inside the free tier's budget. Render polls `/health` and marks the service live once it returns 200.
+5. Open the URL, enter the credentials, and paste the URL into the placeholder at the top of this section.
+
+**Free-tier behaviour to expect during a demo:** the instance sleeps when idle, so the *first* request after a quiet period takes **30–50 seconds** to wake. Hit the URL once before recording the pitch video. Resolutions made in the demo are real writes to real SQLite, but reset to the committed snapshot on each redeploy.
+
+Railway works the same way via the [`Procfile`](Procfile); set the same environment variables in its dashboard. No Dockerfile is included — neither platform needs one for a Flask app, and it would only add surface area to maintain.
+
+### Configuration reference
+
+| Variable | Default | Effect |
+|---|---|---|
+| `PORT` | `5050` | Injected by the host; `--port` still wins locally |
+| `HOST` | `127.0.0.1` | `0.0.0.0` to expose beyond loopback |
+| `DEMO_MODE` | off | Serve `data/demo_review_queue.db` instead of `results/review_queue.db` |
+| `REVIEW_DB_PATH` | unset | Explicit database path; overrides `DEMO_MODE` |
+| `DEMO_USER` / `DEMO_PASSWORD` | unset | Basic auth on every route except `/health`. **Auth is enabled only when both are set** — absent them the app runs open, which is what keeps local development and the test suite unchanged |
+| `READ_ONLY` | off | `POST /api/resolve` returns 403. Kept separate from `DEMO_MODE` so the demo's resolve buttons work on camera |
+
+`GET /health` is unauthenticated by design — the platform's readiness probe cannot send credentials, and a 401 there would fail the deploy. It returns 200 with the queue state, or **503** if the database is unreachable, so a boot with a broken snapshot never takes traffic.
+
+### Run the production server locally
+
+```bash
+DEMO_MODE=1 DEMO_USER=demo DEMO_PASSWORD=localtest gunicorn app:app --bind 127.0.0.1:5099
+```
+
+### Dependency security scan
+
+`pip-audit` was run against `requirements.txt`, `requirements-web.txt`, and the full installed environment as of 2026-09-04:
+
+```
+No known vulnerabilities found
+```
+
+No version bumps were required. Flask and `google-genai` were changed from floating (`>=`) to exact pins so the audit result describes what actually deploys.
+
+---
+
 ## Repository Structure
 
 ```
@@ -166,13 +254,19 @@ python app.py --port 5050
 ├── train.py                      # Training runner with validation-only tuning
 ├── evaluate.py                   # Single-pass held-out test evaluation script
 ├── run_pipeline.py               # End-to-end integration pipeline & benchmark script
+├── app.py                        # Flask review dashboard (gunicorn-served in production)
+├── render.yaml                   # Render blueprint for the hosted demo instance
+├── Procfile                      # Process definition for Procfile-based platforms
+├── requirements-web.txt          # Flask + gunicorn only; dashboard deploy dependencies
+├── data/demo_review_queue.db     # Committed snapshot of REAL briefs for the live demo
+├── scripts/seed_demo_db.py       # Regenerates that snapshot from a real pipeline run
 ├── src/
 │   ├── data/                     # Loaders, checksum integrity, 70/15/15 time-split
 │   ├── features/                 # Preprocessing & 12 causal graph features
 │   ├── models/                   # XGBoost training, thresholding & cost metrics
 │   ├── spike/                    # Phase 3 SpikeScorer (1h/24h) & SpikeEvent detection
 │   └── explain/                  # Phase 4 RiskBrief generator & SQLite ReviewQueue
-├── tests/                        # 62 unit, leakage, concurrency, and integration tests
+├── tests/                        # 70 unit, leakage, concurrency, deployment, and integration tests
 └── results/                      # Committed metrics, manifests, and run summaries
 ```
 
@@ -185,3 +279,15 @@ python app.py --port 5050
 3. **Static Windowing**: Rolling aggregation windows (1h and 24h) are fixed. Dynamic windowing based on per-merchant volatility profiles is a planned extension.
 4. **LLM API Network Latency**: External LLM calls add latency per brief generation; batch runs utilize clean fallback templates when API access is unconfigured.
 5. **No Cross-Dataset Validation**: Validation on a second payment rail (real mobile-money P2P data such as PaySim) was scoped but not completed within the build window. The repository therefore makes no cross-dataset transferability claim. `src/data/paysim_loader.py` retains only a placeholder generator used to exercise split/loader mechanics in tests — it produces fabricated rows, not real PaySim data, and is never used to produce reported metrics.
+
+---
+
+## Deployment Roadmap (deliberately not built)
+
+Scoped out for the submission window; listed so the omissions are explicit rather than accidental:
+
+- **CDN / static asset caching** — the dashboard is one self-contained HTML response; a CDN would add configuration without measurable benefit at demo scale.
+- **Autoscaling & multi-instance** — SQLite is single-writer by design here (see `CLAUDE.md`); horizontal scaling would require migrating the queue to a client/server database, which is a deliberate non-goal for this repository.
+- **Managed Postgres** — same reasoning: the auditable single-file queue is the point.
+- **CI/CD pipeline** — tests run locally via `pytest`; a GitHub Actions workflow is the obvious next step.
+- **Observability stack** — gunicorn access logs to stdout are the whole story today; structured logging, metrics, and alerting would come before any real reviewer traffic.

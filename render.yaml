@@ -1,0 +1,34 @@
+# Render blueprint for the review-queue dashboard demo instance.
+#
+# This deploys the DASHBOARD ONLY. Training and run_pipeline.py are not part of
+# the web service: they need the ~650MB IEEE-CIS dataset and the trained model
+# artifacts, neither of which belongs on a free web tier. The dashboard instead
+# serves data/demo_review_queue.db, a committed snapshot of real briefs (see
+# scripts/seed_demo_db.py and results/demo_seed_provenance.json).
+#
+# Free-tier notes:
+#   - The filesystem is ephemeral. Resolutions made during a demo are real
+#     writes to a real SQLite file, but they reset to the committed snapshot on
+#     every redeploy. That is intentional for a demo instance.
+#   - Instances sleep when idle; the first request after a sleep takes ~30-50s.
+services:
+  - type: web
+    name: fraud-spike-review-queue
+    runtime: python
+    plan: free
+    region: singapore
+    buildCommand: pip install -r requirements-web.txt
+    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --threads 4 --timeout 60 --access-logfile -
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.6"
+      - key: DEMO_MODE
+        value: "1"
+      # Basic-auth credentials. sync:false means Render prompts for the value in
+      # the dashboard instead of reading it from this committed file — never put
+      # the actual credentials here.
+      - key: DEMO_USER
+        sync: false
+      - key: DEMO_PASSWORD
+        sync: false

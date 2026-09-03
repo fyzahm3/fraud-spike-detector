@@ -1,0 +1,404 @@
+{
+  "description": "Provenance for the committed demo review-queue snapshot. Every brief was produced by scoring the real IEEE-CIS held-out test split with the real trained model. Ground-truth labels live here and not in the database, so the dashboard shows a reviewer exactly what a reviewer would see.",
+  "source_dataset": "IEEE-CIS Fraud Detection (data/raw), held-out test split",
+  "split_manifest": "results/split_manifest.json",
+  "variant": "graph",
+  "risk_threshold": 0.7878516297466625,
+  "test_rows_scored": 88581,
+  "total_flagged_transactions": 2540,
+  "total_spike_events_detected": 450,
+  "seeded_brief_count": 30,
+  "seeded_true_positives": 9,
+  "seeded_false_positives": 11,
+  "summary_generator": "deterministic_template",
+  "database_path": "data/demo_review_queue.db",
+  "rows": [
+    {
+      "queue_id": 1,
+      "flagged_type": "transaction",
+      "entity_id": "12184",
+      "test_split_row_index": 51482,
+      "transaction_id": 3540441,
+      "model_score": 0.999983,
+      "strata": [
+        "top_score"
+      ],
+      "ground_truth_is_fraud": 1
+    },
+    {
+      "queue_id": 2,
+      "flagged_type": "transaction",
+      "entity_id": "3643",
+      "test_split_row_index": 20614,
+      "transaction_id": 3509573,
+      "model_score": 0.78786,
+      "strata": [
+        "borderline"
+      ],
+      "ground_truth_is_fraud": 1
+    },
+    {
+      "queue_id": 3,
+      "flagged_type": "transaction",
+      "entity_id": "10568",
+      "test_split_row_index": 34906,
+      "transaction_id": 3523865,
+      "model_score": 0.998776,
+      "strata": [
+        "known_false_positive"
+      ],
+      "ground_truth_is_fraud": 0
+    },
+    {
+      "queue_id": 4,
+      "flagged_type": "transaction",
+      "entity_id": "12184",
+      "test_split_row_index": 51480,
+      "transaction_id": 3540439,
+      "model_score": 0.999983,
+      "strata": [
+        "top_score"
+      ],
+      "ground_truth_is_fraud": 1
+    },
+    {
+      "queue_id": 5,
+      "flagged_type": "transaction",
+      "entity_id": "16346",
+      "test_split_row_index": 63104,
+      "transaction_id": 3552063,
+      "model_score": 0.787873,
+      "strata": [
+        "borderline"
+      ],
+      "ground_truth_is_fraud": 1
+    },
+    {
+      "queue_id": 6,
+      "flagged_type": "transaction",
+      "entity_id": "9500",
+      "test_split_row_index": 81928,
+      "transaction_id": 3570887,
+      "model_score": 0.945347,
+      "strata": [
+        "known_false_positive"
+      ],
+      "ground_truth_is_fraud": 0
+    },
+    {
+      "queue_id": 7,
+      "flagged_type": "transaction",
+      "entity_id": "13351",
+      "test_split_row_index": 3860,
+      "transaction_id": 3492819,
+      "model_score": 0.99998,
+      "strata": [
+        "top_score"
+      ],
+      "ground_truth_is_fraud": 1
+    },
+    {
+      "queue_id": 8,
+      "flagged_type": "transaction",
+      "entity_id": "7585",
+      "test_split_row_index": 48630,
+      "transaction_id": 3537589,
+      "model_score": 0.787893,
+      "strata": [
+        "borderline"
+      ],
+      "ground_truth_is_fraud": 0
+    },
+    {
+      "queue_id": 9,
+      "flagged_type": "transaction",
+      "entity_id": "15315",
+      "test_split_row_index": 65486,
+      "transaction_id": 3554445,
+      "model_score": 0.906611,
+      "strata": [
+        "known_false_positive"
+      ],
+      "ground_truth_is_fraud": 0
+    },
+    {
+      "queue_id": 10,
+      "flagged_type": "transaction",
+      "entity_id": "7255",
+      "test_split_row_index": 51479,
+      "transaction_id": 3540438,
+      "model_score": 0.999979,
+      "strata": [
+        "top_score"
+      ],
+      "ground_truth_is_fraud": 1
+    },
+    {
+      "queue_id": 11,
+      "flagged_type": "transaction",
+      "entity_id": "12469",
+      "test_split_row_index": 68771,
+      "transaction_id": 3557730,
+      "model_score": 0.787939,
+      "strata": [
+        "borderline"
+      ],
+      "ground_truth_is_fraud": 1
+    },
+    {
+      "queue_id": 12,
+      "flagged_type": "transaction",
+      "entity_id": "5365",
+      "test_split_row_index": 31579,
+      "transaction_id": 3520538,
+      "model_score": 0.874128,
+      "strata": [
+        "known_false_positive"
+      ],
+      "ground_truth_is_fraud": 0
+    },
+    {
+      "queue_id": 13,
+      "flagged_type": "transaction",
+      "entity_id": "12184",
+      "test_split_row_index": 40042,
+      "transaction_id": 3529001,
+      "model_score": 0.999952,
+      "strata": [
+        "top_score"
+      ],
+      "ground_truth_is_fraud": 1
+    },
+    {
+      "queue_id": 14,
+      "flagged_type": "transaction",
+      "entity_id": "5812",
+      "test_split_row_index": 84854,
+      "transaction_id": 3573813,
+      "model_score": 0.787978,
+      "strata": [
+        "borderline"
+      ],
+      "ground_truth_is_fraud": 0
+    },
+    {
+      "queue_id": 15,
+      "flagged_type": "transaction",
+      "entity_id": "3213",
+      "test_split_row_index": 71099,
+      "transaction_id": 3560058,
+      "model_score": 0.841627,
+      "strata": [
+        "known_false_positive"
+      ],
+      "ground_truth_is_fraud": 0
+    },
+    {
+      "queue_id": 16,
+      "flagged_type": "transaction",
+      "entity_id": "9633",
+      "test_split_row_index": 51475,
+      "transaction_id": 3540434,
+      "model_score": 0.999951,
+      "strata": [
+        "top_score"
+      ],
+      "ground_truth_is_fraud": 1
+    },
+    {
+      "queue_id": 17,
+      "flagged_type": "transaction",
+      "entity_id": "3154",
+      "test_split_row_index": 77668,
+      "transaction_id": 3566627,
+      "model_score": 0.788196,
+      "strata": [
+        "borderline"
+      ],
+      "ground_truth_is_fraud": 0
+    },
+    {
+      "queue_id": 18,
+      "flagged_type": "transaction",
+      "entity_id": "8135",
+      "test_split_row_index": 24902,
+      "transaction_id": 3513861,
+      "model_score": 0.810166,
+      "strata": [
+        "known_false_positive"
+      ],
+      "ground_truth_is_fraud": 0
+    },
+    {
+      "queue_id": 19,
+      "flagged_type": "transaction",
+      "entity_id": "9500",
+      "test_split_row_index": 54668,
+      "transaction_id": 3543627,
+      "model_score": 0.78823,
+      "strata": [
+        "borderline"
+      ],
+      "ground_truth_is_fraud": 0
+    },
+    {
+      "queue_id": 20,
+      "flagged_type": "transaction",
+      "entity_id": "15066",
+      "test_split_row_index": 77775,
+      "transaction_id": 3566734,
+      "model_score": 0.788264,
+      "strata": [
+        "borderline"
+      ],
+      "ground_truth_is_fraud": 0
+    },
+    {
+      "queue_id": 21,
+      "flagged_type": "spike",
+      "entity_id": "12184",
+      "transaction_ids": [
+        3540439,
+        3540441
+      ],
+      "model_score": 0.999983,
+      "strata": [
+        "spike_event"
+      ],
+      "ground_truth_fraud_count_in_spike": 2
+    },
+    {
+      "queue_id": 22,
+      "flagged_type": "spike",
+      "entity_id": "7255",
+      "transaction_ids": [
+        3540435,
+        3540438
+      ],
+      "model_score": 0.999938,
+      "strata": [
+        "spike_event"
+      ],
+      "ground_truth_fraud_count_in_spike": 2
+    },
+    {
+      "queue_id": 23,
+      "flagged_type": "spike",
+      "entity_id": "14076",
+      "transaction_ids": [
+        3520640,
+        3522630
+      ],
+      "model_score": 0.999905,
+      "strata": [
+        "spike_event"
+      ],
+      "ground_truth_fraud_count_in_spike": 2
+    },
+    {
+      "queue_id": 24,
+      "flagged_type": "spike",
+      "entity_id": "15890",
+      "transaction_ids": [
+        3528431,
+        3528432
+      ],
+      "model_score": 0.999799,
+      "strata": [
+        "spike_event"
+      ],
+      "ground_truth_fraud_count_in_spike": 2
+    },
+    {
+      "queue_id": 25,
+      "flagged_type": "spike",
+      "entity_id": "7381",
+      "transaction_ids": [
+        3519793,
+        3519799,
+        3519815
+      ],
+      "model_score": 0.999725,
+      "strata": [
+        "spike_event"
+      ],
+      "ground_truth_fraud_count_in_spike": 3
+    },
+    {
+      "queue_id": 26,
+      "flagged_type": "spike",
+      "entity_id": "11839",
+      "transaction_ids": [
+        3519778,
+        3519805
+      ],
+      "model_score": 0.999563,
+      "strata": [
+        "spike_event"
+      ],
+      "ground_truth_fraud_count_in_spike": 2
+    },
+    {
+      "queue_id": 27,
+      "flagged_type": "spike",
+      "entity_id": "11839",
+      "transaction_ids": [
+        3572133,
+        3572138
+      ],
+      "model_score": 0.999528,
+      "strata": [
+        "spike_event"
+      ],
+      "ground_truth_fraud_count_in_spike": 2
+    },
+    {
+      "queue_id": 28,
+      "flagged_type": "spike",
+      "entity_id": "6207",
+      "transaction_ids": [
+        3545324,
+        3545327
+      ],
+      "model_score": 0.999525,
+      "strata": [
+        "spike_event"
+      ],
+      "ground_truth_fraud_count_in_spike": 2
+    },
+    {
+      "queue_id": 29,
+      "flagged_type": "spike",
+      "entity_id": "11690",
+      "transaction_ids": [
+        3519759,
+        3519769,
+        3519772,
+        3519827
+      ],
+      "model_score": 0.999323,
+      "strata": [
+        "spike_event"
+      ],
+      "ground_truth_fraud_count_in_spike": 4
+    },
+    {
+      "queue_id": 30,
+      "flagged_type": "spike",
+      "entity_id": "7664",
+      "transaction_ids": [
+        3572116,
+        3572125,
+        3572226,
+        3572266,
+        3572269,
+        3572285
+      ],
+      "model_score": 0.999287,
+      "strata": [
+        "spike_event"
+      ],
+      "ground_truth_fraud_count_in_spike": 6
+    }
+  ]
+}
