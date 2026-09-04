@@ -79,6 +79,7 @@
 
     function loadingPanel(message) {
         return el("div", { className: "panel panel--loading" }, [
+            el("span", { className: "spinner", attrs: { "aria-hidden": "true" } }),
             el("p", { text: message })
         ]);
     }
@@ -471,7 +472,7 @@
                         "Payment submitted. Waiting for the signed webhook \u2014 the item " +
                         "appears below once its signature verifies.", false
                     );
-                    window.setTimeout(load, 2500);
+                    window.setTimeout(refreshIngested, 2500);
                 },
                 modal: {
                     ondismiss: function () {
@@ -482,6 +483,14 @@
             checkout.open();
             liveStatus("Test-mode order " + order.order_id + " created. Complete it with a test card.", false);
         });
+    }
+
+    /* The trigger lives on /live but the queue it feeds is rendered on /demo,
+       so the refresh has to find whichever container this page actually has. */
+    function refreshIngested() {
+        if (byId("live-items-container")) { return loadLiveItems(); }
+        if (byId("pending-container")) { return load(); }
+        return Promise.resolve();
     }
 
     function triggerLiveTransaction() {
@@ -512,13 +521,108 @@
 
     /* --- data ------------------------------------------------------------ */
 
+    /* --- cold start ------------------------------------------------------
+
+       The instance sleeps after inactivity on a free tier, and the first
+       request afterwards can take the better part of a minute. Two things must
+       not happen while that is true: the page must not sit there looking
+       broken, and it must not hang forever with no way out.
+
+       The honest limit of this code: once the container is fully asleep, the
+       server cannot serve this script either, so the browser shows its own
+       blank tab until the first byte arrives. Nothing in the page can fix that
+       — the external uptime ping is what keeps the instance warm. What this
+       does cover is every request after the shell has loaded.
+       --------------------------------------------------------------------- */
+
+    var SLOW_REQUEST_MS = 2500;   // past this, say something rather than spin silently
+    var REQUEST_TIMEOUT_MS = 75000;  // past this, fail visibly with a retry
+
+    var pendingRequests = 0;
+    var slowTimer = null;
+
+    function wakingBanner() {
+        var existing = byId("waking-banner");
+        if (existing) { return existing; }
+        var banner = el("div", {
+            className: "waking", id: "waking-banner",
+            attrs: { role: "status", hidden: "hidden" }
+        }, [
+            el("span", { className: "spinner", attrs: { "aria-hidden": "true" } }),
+            el("div", {}, [
+                el("p", { className: "waking__title", text: "Waking the server\u2026" }),
+                el("p", {
+                    className: "waking__note",
+                    text: "This instance sleeps after a period of inactivity, and the first " +
+                          "request wakes it. It usually takes about 30 seconds. Nothing is wrong."
+                })
+            ])
+        ]);
+        var main = byId("main");
+        if (main) { main.insertBefore(banner, main.firstChild); }
+        return banner;
+    }
+
+    function showWaking() {
+        var banner = wakingBanner();
+        if (banner) { banner.hidden = false; }
+    }
+
+    function hideWaking() {
+        var banner = byId("waking-banner");
+        if (banner) { banner.hidden = true; }
+    }
+
+    function requestStarted() {
+        pendingRequests += 1;
+        if (slowTimer === null) {
+            slowTimer = window.setTimeout(showWaking, SLOW_REQUEST_MS);
+        }
+    }
+
+    function requestFinished() {
+        pendingRequests = Math.max(0, pendingRequests - 1);
+        if (pendingRequests === 0) {
+            if (slowTimer !== null) { window.clearTimeout(slowTimer); slowTimer = null; }
+            hideWaking();
+        }
+    }
+
     function request(url) {
-        return fetch(url, { headers: { Accept: "application/json" } })
+        requestStarted();
+
+        /* AbortController is the difference between "slow" and "hung". Without
+           it a stalled connection leaves the page spinning with no error and no
+           retry, which is the failure being designed out here. */
+        var controller = window.AbortController ? new window.AbortController() : null;
+        var timeout = window.setTimeout(function () {
+            if (controller) { controller.abort(); }
+        }, REQUEST_TIMEOUT_MS);
+
+        var options = { headers: { Accept: "application/json" } };
+        if (controller) { options.signal = controller.signal; }
+
+        return fetch(url, options)
             .then(function (res) {
                 if (!res.ok) {
                     throw new Error("The server returned HTTP " + res.status + " for " + url + ".");
                 }
                 return res.json();
+            })
+            .catch(function (error) {
+                if (error && error.name === "AbortError") {
+                    throw new Error(
+                        "The server did not respond within " +
+                        Math.round(REQUEST_TIMEOUT_MS / 1000) + " seconds. It may still be " +
+                        "waking up \u2014 try again."
+                    );
+                }
+                throw error;
+            })
+            .then(function (value) {
+                window.clearTimeout(timeout); requestFinished(); return value;
+            }, function (error) {
+                window.clearTimeout(timeout); requestFinished(); throw error;
             });
     }
 
@@ -594,6 +698,34 @@
         });
     }
 
+    /* --- live-ingestion page: what has been ingested so far --------------- */
+
+    function loadLiveItems() {
+        var container = byId("live-items-container");
+        if (!container) { return Promise.resolve(); }
+        fill(container, [loadingPanel("Checking the queue\u2026")]);
+
+        return request("/api/pending").then(function (items) {
+            var live = items.filter(function (item) { return !isScored(item); });
+            if (live.length === 0) {
+                fill(container, [emptyPanel(
+                    "No live items ingested yet",
+                    "Trigger a test-mode transaction above and complete it with a test card. The " +
+                    "item appears here once its webhook signature verifies."
+                )]);
+                return;
+            }
+            fill(container, [el("div", { className: "briefs" }, live.map(briefBlock))]);
+        }).catch(function (error) {
+            fill(container, [errorPanel(
+                "Could not read the queue",
+                "The page is running, but the queue database did not answer.",
+                error.message,
+                loadLiveItems
+            )]);
+        });
+    }
+
     /* --- view switching --------------------------------------------------- */
 
     function showView(name) {
@@ -606,6 +738,65 @@
             });
     }
 
+    /* --- contextual help --------------------------------------------------
+
+       The explanation text is already in the document, rendered and escaped by
+       the server. This only toggles visibility — it neither fetches nor builds
+       any part of the content, which is why there is nothing here that could
+       put untrusted markup on the page.
+       --------------------------------------------------------------------- */
+
+    function closeAllHelp(except) {
+        Array.prototype.forEach.call(
+            document.querySelectorAll("[data-help-toggle]"),
+            function (toggle) {
+                if (toggle === except) { return; }
+                var panel = byId(toggle.getAttribute("data-help-toggle"));
+                if (panel) { panel.hidden = true; }
+                toggle.setAttribute("aria-expanded", "false");
+            }
+        );
+    }
+
+    function initHelp() {
+        var toggles = document.querySelectorAll("[data-help-toggle]");
+        if (!toggles.length) { return; }
+
+        Array.prototype.forEach.call(toggles, function (toggle) {
+            toggle.addEventListener("click", function (event) {
+                event.stopPropagation();
+                var panel = byId(toggle.getAttribute("data-help-toggle"));
+                if (!panel) { return; }
+                var opening = panel.hidden;
+                closeAllHelp(toggle);
+                panel.hidden = !opening;
+                toggle.setAttribute("aria-expanded", opening ? "true" : "false");
+            });
+        });
+
+        /* One open at a time, and Escape closes: a note that covers the number
+           it explains is worse than no note. */
+        document.addEventListener("click", function () { closeAllHelp(null); });
+        document.addEventListener("keydown", function (event) {
+            if (event.key === "Escape") { closeAllHelp(null); }
+        });
+        Array.prototype.forEach.call(
+            document.querySelectorAll(".help__panel"),
+            function (panel) {
+                panel.addEventListener("click", function (e) { e.stopPropagation(); });
+            }
+        );
+    }
+
+    /* --- page setup -------------------------------------------------------
+
+       One script serves four pages, so every block is guarded on the elements
+       it needs rather than on a page name. A surface can move between routes
+       without this file having to be told about it.
+       --------------------------------------------------------------------- */
+
+    initHelp();
+
     Array.prototype.forEach.call(document.querySelectorAll(".view-tab"), function (tab) {
         tab.addEventListener("click", function () { showView(tab.dataset.view); });
     });
@@ -615,6 +806,10 @@
         liveButton.addEventListener("click", triggerLiveTransaction);
     }
 
-    showView("pending");
-    load();
+    if (byId("pending-container")) {
+        showView("pending");
+        load();
+    } else if (byId("live-items-container")) {
+        loadLiveItems();
+    }
 })();

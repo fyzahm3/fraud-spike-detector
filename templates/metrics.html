@@ -1,0 +1,331 @@
+{% extends "base.html" %}
+{% import "_help.html" as h with context %}
+{% block title %}Evidence · Fraud-Spike Detector{% endblock %}
+{% block description %}Measured results, methodology, and dataset provenance — every figure traced to a committed artifact.{% endblock %}
+
+{% block content %}
+{% set pc = evidence.phase_comparison %}
+{% set run = evidence.pipeline_run %}
+{% set split = evidence.split_manifest %}
+
+<div class="section-head">
+    <h1>Evidence</h1>
+    <p>
+        Every number on this page is read at request time from a file committed in this repository.
+        Nothing here is computed live, illustrative, or rounded for effect &mdash; the source file is
+        named beside each table.
+    </p>
+</div>
+
+{% if pc %}
+<section class="evidence-block">
+    <div class="section-head">
+        <h2>Phase 1 vs Phase 2 &mdash; held-out test split</h2>
+        <p>
+            The same held-out data, scored once by each variant. The only difference between them is
+            the twelve causal graph features. {{ h.help('graph_features') }}
+            <span class="provenance mono">results/phase_comparison.json</span>
+        </p>
+    </div>
+
+    <div class="table-wrap">
+        <table class="datatable">
+            <caption>Classification and value metrics, both variants</caption>
+            <thead>
+                <tr>
+                    <th scope="col">Metric</th>
+                    <th scope="col" class="num">Baseline</th>
+                    <th scope="col" class="num">Graph</th>
+                    <th scope="col" class="num">Change</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <th scope="row">AUC-PR {{ h.help('auc_pr') }}</th>
+                    <td class="num">{{ '%.4f'|format(pc.baseline.auc_pr) }}</td>
+                    <td class="num strong">{{ '%.4f'|format(pc.graph.auc_pr) }}</td>
+                    <td class="num delta-up">+{{ '%.4f'|format(pc.delta.auc_pr) }}</td>
+                </tr>
+                <tr>
+                    <th scope="row">AUC-ROC</th>
+                    <td class="num">{{ '%.4f'|format(pc.baseline.auc_roc) }}</td>
+                    <td class="num strong">{{ '%.4f'|format(pc.graph.auc_roc) }}</td>
+                    <td class="num delta-up">+{{ '%.4f'|format(pc.delta.auc_roc) }}</td>
+                </tr>
+                <tr>
+                    <th scope="row">Precision</th>
+                    <td class="num">{{ '%.4f'|format(pc.baseline.precision) }}</td>
+                    <td class="num strong">{{ '%.4f'|format(pc.graph.precision) }}</td>
+                    <td class="num delta-up">+{{ '%.4f'|format(pc.delta.precision) }}</td>
+                </tr>
+                <tr>
+                    <th scope="row">Recall</th>
+                    <td class="num">{{ '%.4f'|format(pc.baseline.recall) }}</td>
+                    <td class="num strong">{{ '%.4f'|format(pc.graph.recall) }}</td>
+                    <td class="num delta-up">+{{ '%.4f'|format(pc.delta.recall) }}</td>
+                </tr>
+                <tr>
+                    <th scope="row">F1</th>
+                    <td class="num">{{ '%.4f'|format(pc.baseline.f1) }}</td>
+                    <td class="num strong">{{ '%.4f'|format(pc.graph.f1) }}</td>
+                    <td class="num delta-up">+{{ '%.4f'|format(pc.delta.f1) }}</td>
+                </tr>
+                <tr class="datatable__rule">
+                    <th scope="row">Value caught per unit disrupted {{ h.help('cost_ratio') }}</th>
+                    <td class="num">{{ '%.4f'|format(pc.baseline.ratio) }}</td>
+                    <td class="num strong">{{ '%.4f'|format(pc.graph.ratio) }}</td>
+                    <td class="num delta-up">+{{ '%.4f'|format(pc.delta.ratio) }}</td>
+                </tr>
+                <tr>
+                    <th scope="row">Fraudulent value caught</th>
+                    <td class="num">{{ '{:,.0f}'.format(pc.baseline.fraud_value_caught) }}</td>
+                    <td class="num strong">{{ '{:,.0f}'.format(pc.graph.fraud_value_caught) }}</td>
+                    <td class="num delta-up">+{{ '{:,.0f}'.format(pc.delta.fraud_value_caught) }}</td>
+                </tr>
+                <tr>
+                    <th scope="row">Legitimate value disrupted</th>
+                    <td class="num">{{ '{:,.0f}'.format(pc.baseline.legit_value_disrupted) }}</td>
+                    <td class="num strong">{{ '{:,.0f}'.format(pc.graph.legit_value_disrupted) }}</td>
+                    <td class="num delta-down">{{ '{:,.0f}'.format(pc.delta.legit_value_disrupted) }}</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <h3 class="subhead">Confusion matrix, both variants</h3>
+    <div class="table-wrap">
+        <table class="datatable">
+            <caption>Counts on the held-out test split</caption>
+            <thead>
+                <tr>
+                    <th scope="col">Outcome</th>
+                    <th scope="col" class="num">Baseline</th>
+                    <th scope="col" class="num">Graph</th>
+                    <th scope="col" class="num">Change</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <th scope="row">True positives &mdash; fraud caught</th>
+                    <td class="num">{{ '{:,}'.format(pc.baseline.tp) }}</td>
+                    <td class="num strong">{{ '{:,}'.format(pc.graph.tp) }}</td>
+                    <td class="num delta-up">+{{ '{:,}'.format(pc.delta.tp) }}</td>
+                </tr>
+                <tr>
+                    <th scope="row">False positives &mdash; legitimate flagged</th>
+                    <td class="num">{{ '{:,}'.format(pc.baseline.fp) }}</td>
+                    <td class="num strong">{{ '{:,}'.format(pc.graph.fp) }}</td>
+                    <td class="num delta-down">{{ '{:,}'.format(pc.delta.fp) }}</td>
+                </tr>
+                <tr>
+                    <th scope="row">False negatives &mdash; fraud missed</th>
+                    <td class="num">{{ '{:,}'.format(pc.baseline.fn) }}</td>
+                    <td class="num strong">{{ '{:,}'.format(pc.graph.fn) }}</td>
+                    <td class="num delta-down">{{ '{:,}'.format(pc.delta.fn) }}</td>
+                </tr>
+                <tr>
+                    <th scope="row">True negatives</th>
+                    <td class="num">{{ '{:,}'.format(pc.baseline.tn) }}</td>
+                    <td class="num strong">{{ '{:,}'.format(pc.graph.tn) }}</td>
+                    <td class="num delta-up">+{{ '{:,}'.format(pc.delta.tn) }}</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    {#
+      Drawn inline as SVG from the committed figures. No charting library, no
+      build step, and no numbers that are not in the table above it.
+    #}
+    {% set b_ratio = pc.baseline.ratio %}
+    {% set g_ratio = pc.graph.ratio %}
+    {% set scale = 260 / (g_ratio if g_ratio > 1 else 1) %}
+    <figure class="chart">
+        <figcaption>Value caught per unit disrupted &mdash; the 1.0 line is break-even</figcaption>
+        <svg viewBox="0 0 420 130" role="img" width="420" height="130"
+             aria-label="Baseline {{ '%.2f'|format(b_ratio) }} times, graph variant {{ '%.2f'|format(g_ratio) }} times; break-even is 1.0">
+            <line x1="{{ 110 + scale }}" y1="8" x2="{{ 110 + scale }}" y2="112"
+                  class="chart__breakeven" stroke-dasharray="3 3"></line>
+            <text x="{{ 110 + scale + 5 }}" y="18" class="chart__caption">break-even 1.0&times;</text>
+
+            <text x="102" y="45" class="chart__label" text-anchor="end">Baseline</text>
+            <rect x="110" y="32" width="{{ '%.1f'|format(b_ratio * scale) }}" height="18" class="chart__bar"></rect>
+            <text x="{{ 116 + b_ratio * scale }}" y="45" class="chart__value">{{ '%.2f'|format(b_ratio) }}&times;</text>
+
+            <text x="102" y="85" class="chart__label" text-anchor="end">Graph</text>
+            <rect x="110" y="72" width="{{ '%.1f'|format(g_ratio * scale) }}" height="18" class="chart__bar chart__bar--strong"></rect>
+            <text x="{{ 116 + g_ratio * scale }}" y="85" class="chart__value">{{ '%.2f'|format(g_ratio) }}&times;</text>
+        </svg>
+    </figure>
+</section>
+{% else %}
+<section class="evidence-block">
+    <div class="panel">
+        <h3>Phase comparison not available in this deployment</h3>
+        <p>
+            <span class="mono">results/phase_comparison.json</span> could not be read. The figures are
+            not reproduced from memory here &mdash; if the artifact is absent, the page says so.
+        </p>
+    </div>
+</section>
+{% endif %}
+
+{% if run %}
+<section class="evidence-block">
+    <div class="section-head">
+        <h2>End-to-end run</h2>
+        <p>
+            One pass of the full pipeline over the held-out split.
+            <span class="provenance mono">results/pipeline_run_summary.json</span>
+        </p>
+    </div>
+    <div class="metrics">
+        <div class="metric">
+            <p class="metric__label">Rows scored</p>
+            <p class="metric__value num">{{ '{:,}'.format(run.total_rows_scored) }}</p>
+            <p class="metric__note">variant: {{ run.variant }}</p>
+        </div>
+        <div class="metric">
+            <p class="metric__label">Throughput</p>
+            <p class="metric__value num">{{ '{:,}'.format(run.throughput_txns_per_sec|int) }}</p>
+            <p class="metric__note">transactions per second, over {{ '%.1f'|format(run.scoring_duration_seconds) }}s</p>
+        </div>
+        <div class="metric">
+            <p class="metric__label">Flagged transactions</p>
+            <p class="metric__value num">{{ '{:,}'.format(run.total_flagged_transactions) }}</p>
+            <p class="metric__note">{{ '{:,}'.format(run.total_spikes_detected) }} grouped into spike events</p>
+        </div>
+        <div class="metric">
+            <p class="metric__label">Decision threshold {{ h.help('threshold') }}</p>
+            <p class="metric__value num">{{ '%.4f'|format(run.risk_threshold) }}</p>
+            <p class="metric__note">selected on validation, frozen before test</p>
+        </div>
+    </div>
+</section>
+{% endif %}
+
+{% if split %}
+<section class="evidence-block">
+    <div class="section-head">
+        <h2>Dataset and split protocol {{ h.help('chronological_split') }}</h2>
+        <p>
+            {{ split.split_rule }}.
+            <span class="provenance mono">results/split_manifest.json</span>
+        </p>
+    </div>
+    <div class="table-wrap">
+        <table class="datatable">
+            <caption>Chronological 70/15/15 split, with integrity checksums</caption>
+            <thead>
+                <tr>
+                    <th scope="col">Split</th>
+                    <th scope="col" class="num">Rows</th>
+                    <th scope="col" class="num">Fraud</th>
+                    <th scope="col" class="num">Fraud rate</th>
+                    <th scope="col">SHA-256 (first 16)</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for name in ['train', 'validation', 'test'] %}
+                {% set part = split.splits[name] %}
+                <tr>
+                    <th scope="row">{{ name }}</th>
+                    <td class="num">{{ '{:,}'.format(part.n_rows) }}</td>
+                    <td class="num">{{ '{:,}'.format(part.n_fraud) }}</td>
+                    <td class="num">{{ '%.2f'|format(part.n_fraud / part.n_rows * 100) }}%</td>
+                    <td class="mono checksum">{{ part.sha256[:16] }}&hellip;</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <p class="footnote">
+        The splits do not overlap in time and no timestamp straddles a boundary. Evaluation refuses
+        to run if any checksum differs from this manifest. {{ h.help('leakage') }}
+    </p>
+</section>
+{% endif %}
+
+<section class="evidence-block">
+    <div class="section-head">
+        <h2>Methodology, stated as constraints</h2>
+    </div>
+    <div class="honesty__grid">
+        <div class="honesty__item">
+            <h3>The threshold never sees the test split</h3>
+            <p>
+                No function in the training code accepts the test frame. Hyperparameters and the
+                decision threshold are chosen on validation and frozen. {{ h.help('threshold', '-method') }}
+            </p>
+        </div>
+        <div class="honesty__item">
+            <h3>Streaming features look only backwards</h3>
+            <p>
+                Every graph and spike feature for a given row is computed from strictly earlier rows,
+                on half-open windows with deterministic tie-breaking. Verified against brute-force
+                references and future-corruption tests. {{ h.help('leakage', '-method') }}
+            </p>
+        </div>
+        <div class="honesty__item">
+            <h3>Same seed, same model</h3>
+            <p>
+                Training is pinned to a fixed seed and thread count, so a rerun produces
+                byte-identical models and scores. A test asserts it.
+            </p>
+        </div>
+        <div class="honesty__item">
+            <h3>The model does not write numbers</h3>
+            <p>
+                Scores, confidence, costs, and recommendations are computed before the language model
+                is called; it contributes the prose only. {{ h.help('llm_prose') }}
+            </p>
+        </div>
+    </div>
+</section>
+
+<section class="evidence-block">
+    <div class="section-head">
+        <h2>Dataset study &mdash; and the gap this does not close {{ h.help('dataset_gap') }}</h2>
+    </div>
+    <p class="prose">
+        The primary dataset is IEEE-CIS Fraud Detection: real US e-commerce card-not-present
+        transactions. India's payment ecosystem is driven heavily by UPI, IMPS/NEFT, and wallets,
+        which differ from US card rails in three ways that matter to this architecture.
+    </p>
+    <div class="table-wrap">
+        <table class="datatable">
+            <caption>Where the transfer is not automatic</caption>
+            <thead>
+                <tr>
+                    <th scope="col">Dimension</th>
+                    <th scope="col">Card-not-present, as modelled here</th>
+                    <th scope="col">UPI, as it actually behaves</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <th scope="row">Entity topology</th>
+                    <td>Card fields, billing address, email domain</td>
+                    <td>Virtual payment addresses, device identifiers, bank handles, account numbers</td>
+                </tr>
+                <tr>
+                    <th scope="row">Velocity</th>
+                    <td>Settlement over 1&ndash;3 days; hourly and daily windows fit</td>
+                    <td>Instant, around the clock; multi-hop fan-out unfolds in seconds</td>
+                </tr>
+                <tr>
+                    <th scope="row">Typology</th>
+                    <td>Stolen card details used remotely</td>
+                    <td>SIM-swap and OTP compromise, collect-request abuse, QR social engineering</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+    <p class="prose">
+        Adapting this to UPI would mean replacing card-node features with directed
+        address-to-address transfer edges, shortening the rolling windows from hours to seconds,
+        and adding device and geolocation telemetry. That work is described rather than claimed:
+        no synthetic UPI data was generated, because fabricated data yields fabricated metrics.
+    </p>
+</section>
+{% endblock %}

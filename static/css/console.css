@@ -963,3 +963,535 @@ body {
     font-style: italic;
 }
 
+/* The interface hides things by setting the `hidden` property in JavaScript, and
+   any element given an explicit `display` outranks the user agent's own
+   [hidden] rule — so it stays visible while the DOM reports it as hidden. This
+   caught two elements here already (the help panel and the waking banner). One
+   rule, applied to everything, rather than a fix per component that the next
+   component will need again. */
+[hidden] { display: none !important; }
+
+/* --------------------------------------------------------------------------
+   Site chrome — navigation across the four surfaces
+
+   Four real routes, so four real links. The active one is marked by weight and
+   an underline as well as colour, because a nav that distinguishes the current
+   page by hue alone tells a colour-blind reader nothing.
+   -------------------------------------------------------------------------- */
+
+.skip-link {
+    position: absolute;
+    left: -9999px;
+    top: 0;
+    z-index: 10;
+    padding: var(--s-3) var(--s-5);
+    background: var(--surface);
+    color: var(--ink);
+    font-weight: 600;
+}
+
+.skip-link:focus { left: var(--s-5); top: var(--s-3); }
+
+.masthead__identity {
+    display: block;
+    text-decoration: none;
+    color: inherit;
+}
+
+.masthead__identity:hover .masthead__title { text-decoration: underline; }
+
+.masthead__identity .masthead__title { display: block; }
+
+.nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s-1);
+}
+
+.nav__link {
+    padding: var(--s-2) var(--s-4);
+    border-bottom: 2px solid transparent;
+    color: var(--ink-on-dark-secondary);
+    font-size: 13px;
+    line-height: 20px;
+    font-weight: 500;
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.nav__link:hover { color: var(--ink-on-dark); }
+
+.nav__link--active {
+    border-bottom-color: var(--ink-on-dark);
+    color: var(--ink-on-dark);
+    font-weight: 600;
+}
+
+.section-head h1 {
+    margin: 0;
+    font-size: 20px;
+    line-height: 28px;
+    font-weight: 600;
+    color: var(--ink);
+}
+
+.factstrip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0;
+    margin: 0 0 var(--s-6);
+    border: var(--hairline) solid var(--rule);
+    border-radius: var(--radius);
+    background: var(--surface);
+}
+
+.factstrip > div {
+    padding: var(--s-3) var(--s-5);
+    border-left: var(--hairline) solid var(--rule);
+}
+
+.factstrip > div:first-child { border-left: 0; }
+
+.factstrip dt {
+    margin: 0 0 var(--s-1);
+    font-size: 11px;
+    line-height: 16px;
+    font-weight: 500;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-muted);
+}
+
+.factstrip dd {
+    margin: 0;
+    font-size: 13px;
+    line-height: 18px;
+    font-weight: 500;
+    color: var(--ink);
+}
+
+/* --------------------------------------------------------------------------
+   Cold start
+
+   A free instance sleeps, and the request that wakes it can take most of a
+   minute. The one thing that must never happen is a silent spin: either the
+   page says what it is waiting for, or it fails with a way to retry.
+   -------------------------------------------------------------------------- */
+
+.waking {
+    display: flex;
+    gap: var(--s-4);
+    align-items: flex-start;
+    margin: var(--s-5) 0 0;
+    padding: var(--s-4) var(--s-5);
+    border: var(--hairline) solid var(--cider-200);
+    border-radius: var(--radius);
+    background: var(--cider-50);
+}
+
+.waking__title {
+    margin: 0;
+    font-size: 13px;
+    line-height: 18px;
+    font-weight: 600;
+    color: var(--cider-900);
+}
+
+.waking__note {
+    margin: var(--s-1) 0 0;
+    max-width: 64ch;
+    font-size: 12px;
+    line-height: 17px;
+    color: var(--cider-900);
+}
+
+.spinner {
+    flex-shrink: 0;
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    margin-top: 2px;
+    border: 2px solid var(--rule-strong);
+    border-top-color: var(--ink-muted);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Motion is decoration here; the text already says what is happening. */
+@media (prefers-reduced-motion: reduce) {
+    .spinner { animation: none; border-top-color: var(--rule-strong); }
+}
+
+.panel--loading { display: flex; align-items: center; gap: var(--s-3); }
+.panel--loading p { margin: 0; }
+
+/* --------------------------------------------------------------------------
+   Contextual help
+
+   Written explanations, rendered server-side and revealed on click. Positioned
+   absolutely so opening one never reflows the figure it explains.
+   -------------------------------------------------------------------------- */
+
+.help { position: relative; display: inline-block; vertical-align: baseline; }
+
+.help__toggle {
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    padding: 0;
+    margin-left: var(--s-1);
+    border: var(--hairline) solid var(--rule-strong);
+    border-radius: 50%;
+    background: var(--surface);
+    color: var(--ink-muted);
+    font-family: inherit;
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1;
+    cursor: pointer;
+    vertical-align: middle;
+}
+
+.help__toggle:hover {
+    border-color: var(--action);
+    color: var(--action);
+}
+
+.help__toggle[aria-expanded="true"] {
+    background: var(--action);
+    border-color: var(--action);
+    color: var(--ink-on-dark);
+}
+
+.help__panel {
+    position: absolute;
+    z-index: 20;
+    top: calc(100% + 6px);
+    left: 0;
+    display: block;
+    width: max-content;
+    max-width: min(38ch, 80vw);
+    padding: var(--s-4);
+    border: var(--hairline) solid var(--rule-strong);
+    border-radius: var(--radius);
+    background: var(--surface);
+    box-shadow: 0 8px 24px rgba(28, 32, 38, 0.14);
+    text-align: left;
+    text-transform: none;
+    letter-spacing: 0;
+    cursor: auto;
+}
+
+.help__title {
+    display: block;
+    margin-bottom: var(--s-2);
+    font-size: 12px;
+    line-height: 17px;
+    font-weight: 600;
+    color: var(--ink);
+}
+
+.help__body {
+    display: block;
+    font-size: 12px;
+    line-height: 18px;
+    font-weight: 400;
+    color: var(--ink-secondary);
+}
+
+/* --------------------------------------------------------------------------
+   Landing page
+   -------------------------------------------------------------------------- */
+
+.hero { padding: var(--s-9) 0 var(--s-8); max-width: 76ch; }
+
+.hero__title {
+    margin: 0;
+    font-size: 32px;
+    line-height: 40px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: var(--ink);
+}
+
+.hero__lede {
+    margin: var(--s-5) 0 0;
+    max-width: 68ch;
+    font-size: 15px;
+    line-height: 24px;
+    color: var(--ink-secondary);
+}
+
+.hero__actions { display: flex; flex-wrap: wrap; gap: var(--s-3); margin-top: var(--s-6); }
+
+.hero__actions .btn { text-decoration: none; display: inline-flex; align-items: center; }
+
+.hero__note {
+    margin: var(--s-4) 0 0;
+    font-size: 12px;
+    line-height: 17px;
+    color: var(--ink-muted);
+}
+
+.section-title {
+    margin: 0 0 var(--s-2);
+    font-size: 16px;
+    line-height: 24px;
+    font-weight: 600;
+    color: var(--ink);
+}
+
+.section-intro {
+    margin: 0 0 var(--s-5);
+    max-width: 68ch;
+    font-size: 12px;
+    line-height: 18px;
+    color: var(--ink-muted);
+}
+
+.headline, .how, .atglance, .honesty { padding: var(--s-7) 0; border-top: var(--hairline) solid var(--rule); }
+
+.headline__grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+    gap: 0;
+    border: var(--hairline) solid var(--rule);
+    border-radius: var(--radius);
+    background: var(--surface);
+}
+
+.headline__stat { padding: var(--s-5); border-left: var(--hairline) solid var(--rule); }
+.headline__stat:first-child { border-left: 0; }
+
+.headline__label {
+    margin: 0 0 var(--s-2);
+    font-size: 11px;
+    line-height: 16px;
+    font-weight: 500;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-muted);
+}
+
+.headline__value {
+    margin: 0;
+    font-size: 28px;
+    line-height: 34px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    color: var(--ink);
+}
+
+.headline__note {
+    margin: var(--s-2) 0 0;
+    font-size: 12px;
+    line-height: 17px;
+    color: var(--ink-muted);
+}
+
+.how__steps {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+    gap: var(--s-5);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.how__steps--tight { grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr)); }
+
+.how__step {
+    padding: var(--s-5);
+    border: var(--hairline) solid var(--rule);
+    border-radius: var(--radius);
+    background: var(--surface);
+}
+
+.how__step-label {
+    margin: 0 0 var(--s-3);
+    font-size: 11px;
+    line-height: 16px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-muted);
+}
+
+.how__step h3 {
+    margin: 0 0 var(--s-2);
+    font-size: 14px;
+    line-height: 20px;
+    font-weight: 600;
+    color: var(--ink);
+}
+
+.how__step p {
+    margin: 0;
+    font-size: 12px;
+    line-height: 18px;
+    color: var(--ink-secondary);
+}
+
+.atglance__grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+    gap: var(--s-5);
+}
+
+.atglance__value {
+    margin: 0;
+    font-size: 24px;
+    line-height: 30px;
+    font-weight: 600;
+    color: var(--ink);
+}
+
+.atglance__label {
+    margin: var(--s-2) 0 0;
+    font-size: 12px;
+    line-height: 17px;
+    color: var(--ink-muted);
+}
+
+.honesty__grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
+    gap: var(--s-5);
+}
+
+.honesty__item h3 {
+    margin: 0 0 var(--s-2);
+    font-size: 13px;
+    line-height: 19px;
+    font-weight: 600;
+    color: var(--ink);
+}
+
+.honesty__item p {
+    margin: 0;
+    font-size: 12px;
+    line-height: 18px;
+    color: var(--ink-secondary);
+}
+
+/* --------------------------------------------------------------------------
+   Evidence page
+   -------------------------------------------------------------------------- */
+
+.evidence-block { padding: var(--s-7) 0; border-top: var(--hairline) solid var(--rule); }
+.evidence-block:first-of-type { border-top: 0; padding-top: var(--s-5); }
+
+.provenance {
+    display: inline-block;
+    margin-left: var(--s-2);
+    padding: 1px var(--s-2);
+    border: var(--hairline) solid var(--rule);
+    border-radius: var(--radius-chip);
+    background: var(--surface-sunk);
+    font-size: 11px;
+    color: var(--ink-muted);
+}
+
+.subhead {
+    margin: var(--s-7) 0 var(--s-4);
+    font-size: 14px;
+    line-height: 20px;
+    font-weight: 600;
+    color: var(--ink);
+}
+
+.table-wrap { overflow-x: auto; }
+
+.datatable {
+    width: 100%;
+    border-collapse: collapse;
+    border: var(--hairline) solid var(--rule);
+    border-radius: var(--radius);
+    background: var(--surface);
+    font-size: 12px;
+    line-height: 18px;
+}
+
+.datatable caption {
+    padding: 0 0 var(--s-3);
+    text-align: left;
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-muted);
+}
+
+.datatable th, .datatable td {
+    padding: var(--s-3) var(--s-5);
+    border-top: var(--hairline) solid var(--rule);
+    text-align: left;
+    vertical-align: top;
+}
+
+.datatable thead th {
+    border-top: 0;
+    background: var(--surface-sunk);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--ink-muted);
+    white-space: nowrap;
+}
+
+.datatable tbody th { font-weight: 500; color: var(--ink-secondary); }
+.datatable td.num, .datatable th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.datatable .strong { font-weight: 600; color: var(--ink); }
+.datatable__rule th, .datatable__rule td { border-top-width: 2px; border-top-color: var(--rule-strong); }
+.datatable .checksum { font-size: 11px; color: var(--ink-muted); }
+
+.delta-up { color: var(--emerald-800); font-weight: 600; }
+.delta-down { color: var(--emerald-800); font-weight: 600; }
+
+.footnote {
+    margin: var(--s-4) 0 0;
+    max-width: 72ch;
+    font-size: 12px;
+    line-height: 18px;
+    color: var(--ink-muted);
+}
+
+.prose {
+    margin: 0 0 var(--s-4);
+    max-width: 72ch;
+    font-size: 13px;
+    line-height: 20px;
+    color: var(--ink-secondary);
+}
+
+/* Inline SVG, drawn from the same committed figures as the table above it.
+   No charting library, no build step, no numbers of its own. */
+.chart { margin: var(--s-7) 0 0; }
+
+.chart figcaption {
+    margin-bottom: var(--s-4);
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-muted);
+}
+
+.chart svg { max-width: 100%; height: auto; }
+.chart__bar { fill: var(--ash-400); }
+.chart__bar--strong { fill: var(--action); }
+.chart__breakeven { stroke: var(--rule-strong); }
+.chart__label { fill: var(--ink-secondary); font-size: 11px; font-weight: 500; }
+.chart__value { fill: var(--ink); font-size: 11px; font-weight: 600; }
+.chart__caption { fill: var(--ink-muted); font-size: 10px; }
+
+@media (max-width: 720px) {
+    .masthead__inner { align-items: flex-start; }
+    .nav { gap: 0; }
+    .hero__title { font-size: 26px; line-height: 34px; }
+    .factstrip > div { border-left: 0; border-top: var(--hairline) solid var(--rule); }
+    .factstrip > div:first-child { border-top: 0; }
+    .headline__stat { border-left: 0; border-top: var(--hairline) solid var(--rule); }
+    .headline__stat:first-child { border-top: 0; }
+}

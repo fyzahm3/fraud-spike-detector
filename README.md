@@ -206,19 +206,62 @@ Measured on the built result: 36 distinct text-on-background pairs across both v
 ## Live Demo
 
 **URL:** <https://fraud-spike-review-queue.onrender.com>
-**Credentials:** shared privately with the judging panel (HTTP basic auth).
-**Health check (unauthenticated):** <https://fraud-spike-review-queue.onrender.com/health>
+**Credentials: none needed to look at anything.** The site is public and read-only; the
+password applies only to the two routes that change state (recording a reviewer decision,
+and creating a test-mode order). Open the link and you are looking at the product.
+**Health check:** <https://fraud-spike-review-queue.onrender.com/health>
+
+### The four surfaces
+
+| Route | What it is |
+|---|---|
+| `/` | Landing page — what the system does, and the headline evidence |
+| `/metrics` | Evidence — phase comparison, value ratio, split protocol, methodology, dataset study |
+| `/demo` | The review queue itself, read-only for anyone who opens it |
+| `/live` | Razorpay test-mode ingestion, and why the ingested item carries no score |
+
+Four real routes in one Flask app with persistent navigation — no framework, no build step,
+no tabs faked in JavaScript. Every figure rendered on `/` and `/metrics` is read at request
+time from a committed artifact under `results/`;
+`tests/test_site.py::test_every_displayed_metric_matches_the_committed_artifact` re-derives
+each one from its source file and requires the page to contain that exact string, so a number
+cannot drift from its evidence or be typed in by hand.
+
+A small `?` beside major figures opens a written explanation — what AUC-PR is and why accuracy
+misleads here, what the value ratio means, why the split is chronological, why the LLM writes
+only prose, why the live transaction is unscored. That content is a static map in `app.py`,
+rendered by Jinja. There is no model call behind it, deliberately: an improvised explanation
+of this project's own evaluation protocol is exactly the text that must not be able to be
+wrong, and a test asserts the code path cannot reach an LLM.
+
+Measured locally under gunicorn, against the committed snapshot the hosted instance serves,
+**with basic auth switched on** — every read still answers, and only the mutation is refused:
 
 ```console
 $ DEMO_MODE=1 DEMO_USER=demo DEMO_PASSWORD=localtest \
     gunicorn app:app --bind 127.0.0.1:5099 &
+
 $ curl -s http://127.0.0.1:5099/health
 {"auth_enabled":true,"database":"data/demo_review_queue.db","database_reachable":true,
  "demo_mode":true,"pending_items":30,"read_only":false,"status":"ok"}
+
+$ for p in / /metrics /demo /live /api/pending; do
+>   curl -s -o /dev/null -w "$p -> %{http_code}\n" http://127.0.0.1:5099$p
+> done
+/ -> 200
+/metrics -> 200
+/demo -> 200
+/live -> 200
+/api/pending -> 200
+
+$ curl -s -o /dev/null -w '%{http_code}\n' -X POST \
+>   http://127.0.0.1:5099/api/resolve/1 \
+>   -H 'Content-Type: application/json' -d '{"action":"escalated"}'
+401
 ```
 
-Measured locally against the committed snapshot the hosted instance serves. `pending_items`
-is the full queue depth; the deployed instance reports it once the current commit is redeployed.
+`pending_items` is the full queue depth; the deployed instance reports it once the current
+commit is redeployed.
 
 ### What the hosted instance actually serves
 
@@ -298,12 +341,37 @@ Railway works the same way via the [`Procfile`](Procfile); set the same environm
 | `HOST` | `127.0.0.1` | `0.0.0.0` to expose beyond loopback |
 | `DEMO_MODE` | off | Serve `data/demo_review_queue.db` instead of `results/review_queue.db` |
 | `REVIEW_DB_PATH` | unset | Explicit database path; overrides `DEMO_MODE` |
-| `DEMO_USER` / `DEMO_PASSWORD` | unset | Basic auth on every route except `/health`. **Auth is enabled only when both are set** — absent them the app runs open, which is what keeps local development and the test suite unchanged |
-| `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` | unset | Test-mode Razorpay keys for live ingestion. A key id that is not `rzp_test_`-prefixed is refused before any network call |
+| `DEMO_USER` / `DEMO_PASSWORD` | unset | Basic auth on **state-changing requests only** — reading every page and every JSON API is public. **Auth is enabled only when both are set**; absent them mutations are open too, which keeps local development and the test suite unchanged |
+| `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` | unset | Test-mode Razorpay keys for `/live`. A key id that is not `rzp_test_`-prefixed is refused before any network call |
 | `RAZORPAY_WEBHOOK_SECRET` | unset | HMAC-SHA256 signing secret for `POST /api/webhook/razorpay` |
 | `READ_ONLY` | off | `POST /api/resolve` returns 403. Kept separate from `DEMO_MODE` so the demo's resolve buttons work on camera |
 
-`GET /health` is unauthenticated by design — the platform's readiness probe cannot send credentials, and a 401 there would fail the deploy. It returns 200 with the queue state, or **503** if the database is unreachable, so a boot with a broken snapshot never takes traffic.
+The gate is drawn on the **HTTP method**, not on a list of public paths, and that direction is
+the point: a path allowlist fails open, because adding a route and forgetting to list it leaves
+it unprotected. This fails closed — a new route is public only while it is read-only, and
+becomes password-protected the moment it accepts a POST.
+`tests/test_ui.py::test_auth_gate_is_drawn_on_the_method_so_new_routes_fail_closed` asserts that
+property against a path with no route at all.
+
+`GET /health` therefore needs no special case; it is a GET like every other public surface. It
+returns 200 with the queue state, or **503** if the database is unreachable, so a boot with a
+broken snapshot never takes traffic.
+
+### Cold start
+
+The free instance sleeps after inactivity, and the request that wakes it can take most of a
+minute. Two mitigations, in order of how much they matter:
+
+1. **An external uptime monitor pings `/health` every 5 minutes.** This is the actual fix and it
+   lives outside this repository — a warm instance never cold-starts for a visitor. `/health` is
+   public and cheap, which is what makes it pingable.
+2. **The page never spins silently.** Past 2.5 seconds any request shows a labelled "waking the
+   server, about 30 seconds" state with a spinner; past 75 seconds it aborts and shows an error
+   with a retry control rather than hanging forever.
+
+The honest limit of the second one: once the container is fully asleep it cannot serve the page
+either, so the browser shows its own blank tab until the first byte arrives. No in-app code can
+change that, which is why the uptime ping is listed first rather than second.
 
 ### Run the production server locally
 

@@ -1,0 +1,179 @@
+{% extends "base.html" %}
+{% import "_help.html" as h with context %}
+{% block title %}Fraud-Spike Detector · Explainable, human-gated escalation{% endblock %}
+
+{% block content %}
+{% set pc = evidence.phase_comparison %}
+{% set run = evidence.pipeline_run %}
+{% set split = evidence.split_manifest %}
+
+<section class="hero">
+    <h1 class="hero__title">Fraud detection that hands a person a decision, not a verdict.</h1>
+    <p class="hero__lede">
+        Per-transaction risk scoring, rolling per-entity spike aggregation, and a written brief for
+        every flagged item &mdash; delivered into an auditable queue where a human reviewer decides.
+        The system has no code path that can act on a payment, and automated tests enforce that on
+        every run. {{ h.help('human_decides') }}
+    </p>
+    <div class="hero__actions">
+        <a class="btn btn--primary" href="{{ url_for('demo_page') }}">Open the review queue</a>
+        <a class="btn" href="{{ url_for('metrics_page') }}">See the evidence</a>
+    </div>
+    <p class="hero__note">
+        Public and read-only. No sign-in to look at anything; the password applies only to recording
+        a decision or creating a test-mode order.
+    </p>
+</section>
+
+{% if pc %}
+<section class="headline">
+    <h2 class="section-title">What the graph features changed</h2>
+    <p class="section-intro">
+        Measured once on the held-out test split, comparing the baseline model against the variant
+        with causal graph features. Both numbers below are read from
+        <span class="mono">results/phase_comparison.json</span>.
+    </p>
+    <div class="headline__grid">
+        <div class="headline__stat">
+            <p class="headline__label">AUC-PR {{ h.help('auc_pr') }}</p>
+            <p class="headline__value num">{{ '%.4f'|format(pc.graph.auc_pr) }}</p>
+            <p class="headline__note">
+                from {{ '%.4f'|format(pc.baseline.auc_pr) }} baseline
+                &middot; <span class="delta-up">+{{ '%.4f'|format(pc.delta.auc_pr) }}</span>
+            </p>
+        </div>
+        <div class="headline__stat">
+            <p class="headline__label">Value caught per unit disrupted {{ h.help('cost_ratio') }}</p>
+            <p class="headline__value num">{{ '%.2f'|format(pc.graph.ratio) }}&times;</p>
+            <p class="headline__note">
+                from {{ '%.2f'|format(pc.baseline.ratio) }}&times; baseline
+                &middot; crosses 1.0, where caught value exceeds disrupted value
+            </p>
+        </div>
+        <div class="headline__stat">
+            <p class="headline__label">Recall</p>
+            <p class="headline__value num">{{ '%.1f'|format(pc.graph.recall * 100) }}%</p>
+            <p class="headline__note">
+                from {{ '%.1f'|format(pc.baseline.recall * 100) }}% baseline
+                &middot; {{ '{:,}'.format(pc.graph.tp) }} of
+                {{ '{:,}'.format(pc.graph.tp + pc.graph.fn) }} fraudulent transactions
+            </p>
+        </div>
+        <div class="headline__stat">
+            <p class="headline__label">False positives</p>
+            <p class="headline__value num">{{ '{:,}'.format(pc.graph.fp) }}</p>
+            <p class="headline__note">
+                down from {{ '{:,}'.format(pc.baseline.fp) }}
+                &middot; more fraud caught on fewer false alarms
+            </p>
+        </div>
+    </div>
+</section>
+{% endif %}
+
+<section class="how">
+    <h2 class="section-title">How it works</h2>
+    <ol class="how__steps">
+        <li class="how__step">
+            <p class="how__step-label">1 &middot; Score</p>
+            <h3>Every transaction, on its own merits</h3>
+            <p>
+                A gradient-boosted model scores each transaction. Alongside the tabular features it
+                reads twelve causal co-occurrence features describing how a card, email, device, or
+                address has behaved over the previous hours and days &mdash; each computed from
+                strictly earlier transactions only. {{ h.help('graph_features', '-step') }}
+            </p>
+        </li>
+        <li class="how__step">
+            <p class="how__step-label">2 &middot; Aggregate</p>
+            <h3>Bursts, not just outliers</h3>
+            <p>
+                Scores roll up per entity over 1-hour and 24-hour windows and are compared against
+                that entity's own earlier baseline. Coordinated abuse shows up as a burst that a
+                per-transaction score alone reads as unrelated events. {{ h.help('spike') }}
+            </p>
+        </li>
+        <li class="how__step">
+            <p class="how__step-label">3 &middot; Explain</p>
+            <h3>A brief a reviewer can argue with</h3>
+            <p>
+                The score, the confidence band, the estimated cost of a false positive, and the
+                recommendation are all computed in Python. A language model writes the summary
+                paragraph and nothing else, so it cannot introduce a number or change a
+                recommendation. {{ h.help('llm_prose') }}
+            </p>
+        </li>
+        <li class="how__step">
+            <p class="how__step-label">4 &middot; Decide</p>
+            <h3>The reviewer holds the decision</h3>
+            <p>
+                Items land in a queue with an append-only audit log. Resolving one updates a status
+                and writes a permanent row; a correction is a new row, never an edit. The action is
+                required and validated &mdash; a decision is never recorded by default.
+            </p>
+        </li>
+    </ol>
+</section>
+
+{% if run and split %}
+<section class="atglance">
+    <h2 class="section-title">Measured, not asserted</h2>
+    <div class="atglance__grid">
+        <div class="atglance__item">
+            <p class="atglance__value num">{{ '{:,}'.format(split.splits.test.n_rows) }}</p>
+            <p class="atglance__label">transactions in the held-out test split, scored once</p>
+        </div>
+        <div class="atglance__item">
+            <p class="atglance__value num">{{ '{:,}'.format(run.throughput_txns_per_sec|int) }}</p>
+            <p class="atglance__label">transactions scored per second, end to end</p>
+        </div>
+        <div class="atglance__item">
+            <p class="atglance__value num">{{ '{:,}'.format(run.total_spikes_detected) }}</p>
+            <p class="atglance__label">spike events grouped from that run</p>
+        </div>
+        <div class="atglance__item">
+            <p class="atglance__value num">3</p>
+            <p class="atglance__label">splits, each SHA-256 checksummed and verified before evaluation {{ h.help('leakage') }}</p>
+        </div>
+    </div>
+</section>
+{% endif %}
+
+<section class="honesty">
+    <h2 class="section-title">What this deliberately does not claim</h2>
+    <div class="honesty__grid">
+        <div class="honesty__item">
+            <h3>It does not act on payments</h3>
+            <p>
+                There is no interface to any payment action anywhere in the codebase, in either
+                direction. This is verified by source scans in the test suite rather than asserted
+                in a policy document.
+            </p>
+        </div>
+        <div class="honesty__item">
+            <h3>Live payments are not scored</h3>
+            <p>
+                The live-ingestion demo receives a real test-mode payment and queues it marked
+                explicitly as unscored, because a payment webhook does not contain the feature space
+                the model was trained on. {{ h.help('live_unscored') }}
+            </p>
+        </div>
+        <div class="honesty__item">
+            <h3>The training data is US card data</h3>
+            <p>
+                It is not UPI data, and no synthetic UPI data was generated to stand in for it.
+                The gap is documented rather than filled. {{ h.help('dataset_gap') }}
+            </p>
+        </div>
+        <div class="honesty__item">
+            <h3>No cross-dataset claim</h3>
+            <p>
+                Validation on a second payment rail was scoped and not completed in the build
+                window, so no transferability claim is made. An earlier revision reported perfect
+                scores on a placeholder generator; those were an artifact of label leakage, and both
+                the numbers and the script producing them were deleted.
+            </p>
+        </div>
+    </div>
+</section>
+{% endblock %}

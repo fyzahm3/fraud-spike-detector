@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% import "_help.html" as h with context %}
+{% block title %}Review queue · Fraud-Spike Detector{% endblock %}
+{% block description %}Human-gated review console for flagged transaction and spike risk briefs.{% endblock %}
+
+{% block content %}
+<div class="section-head">
+    <h1>Review queue</h1>
+    <p>
+        Flagged transactions and spike events awaiting a human decision, read from the committed
+        demo snapshot this instance serves. Reading is public; recording a decision is not.
+    </p>
+</div>
+
+<dl class="factstrip">
+    <div>
+        <dt>Source</dt>
+        <dd>IEEE-CIS held-out split {{ h.help('chronological_split') }}</dd>
+    </div>
+    <div>
+        <dt>Model</dt>
+        <dd>XGBoost + causal graph {{ h.help('graph_features') }}</dd>
+    </div>
+    <div>
+        <dt>Decision authority</dt>
+        <dd>Human reviewer {{ h.help('human_decides') }}</dd>
+    </div>
+</dl>
+
+<h2 class="visually-hidden">Queue overview</h2>
+<div class="metrics">
+    <div class="metric">
+        <p class="metric__label">Awaiting review</p>
+        <p class="metric__value num" id="metric-pending">&mdash;</p>
+        <p class="metric__note" id="metric-pending-note">&nbsp;</p>
+    </div>
+    <div class="metric">
+        <p class="metric__label">Mean risk score {{ h.help('threshold') }}</p>
+        <p class="metric__value num" id="metric-score">&mdash;</p>
+        <p class="metric__note" id="metric-score-note">&nbsp;</p>
+    </div>
+    <div class="metric">
+        <p class="metric__label">Est. false-positive cost {{ h.help('cost_ratio', '-tile') }}</p>
+        <p class="metric__value num" id="metric-cost">&mdash;</p>
+        <p class="metric__note">Disrupted value if every pending item is legitimate</p>
+    </div>
+    <div class="metric">
+        <p class="metric__label">Decisions recorded</p>
+        <p class="metric__value num" id="metric-resolved">&mdash;</p>
+        <p class="metric__note">Append-only, this instance</p>
+    </div>
+</div>
+
+<div class="views" role="tablist" aria-label="Console views">
+    <button class="view-tab" type="button" role="tab" id="tab-pending"
+            aria-controls="view-pending" aria-selected="true" data-view="pending">
+        Pending review<span class="view-tab__count num" id="count-pending">0</span>
+    </button>
+    <button class="view-tab" type="button" role="tab" id="tab-audit"
+            aria-controls="view-audit" aria-selected="false" data-view="audit">
+        Audit trail<span class="view-tab__count num" id="count-audit">0</span>
+    </button>
+</div>
+
+<section id="view-pending" role="tabpanel" aria-labelledby="tab-pending" tabindex="-1">
+    <div class="section-head">
+        <h2>Briefs awaiting a decision {{ h.help('spike') }}</h2>
+        <p>Ordered by model risk score, highest first. Every factor shown is a model input, not a conclusion.</p>
+    </div>
+    <div id="pending-container" aria-live="polite" aria-busy="true"></div>
+</section>
+
+<section id="view-audit" role="tabpanel" aria-labelledby="tab-audit" tabindex="-1" hidden>
+    <div class="section-head">
+        <h2>Recorded decisions</h2>
+        <p>Every resolution written to the append-only audit log, newest first. Rows are never edited or removed; a correction is a new row.</p>
+    </div>
+    <div id="audit-container" aria-live="polite"></div>
+</section>
+{% endblock %}
+
+{% block colophon %}
+<p>
+    Counts and scores on this page are read from the review-queue database this instance is
+    serving. Ground-truth fraud labels are deliberately not present in that database, so the
+    console shows a reviewer exactly what a reviewer would see.
+</p>
+{% endblock %}

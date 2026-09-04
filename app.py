@@ -100,9 +100,174 @@ CSRF_HEADER_NAME = "X-CSRF-Token"
 # authenticates by HMAC signature instead, which is the stronger of the two.
 WEBHOOK_PATH = "/api/webhook/razorpay"
 
-# Paths that must answer without the demo credentials: the platform's readiness
-# probe, and the webhook (see above).
-UNAUTHENTICATED_PATHS = frozenset({"/health", WEBHOOK_PATH})
+# ---------------------------------------------------------------------------
+# Contextual help.
+#
+# Written prose, held in one place and rendered into the page by Jinja. There is
+# no LLM call behind the "?" affordances and there is deliberately no way to add
+# one: an explanation of this system's own methodology is exactly the text that
+# must not be improvised, because a plausible-sounding wrong answer about the
+# evaluation protocol is worse than no answer at all. Deterministic, fast, and
+# incapable of hallucinating.
+#
+# Each entry is (title, body). Bodies are escaped by Jinja on render and reach
+# the page as text nodes, never as markup.
+# ---------------------------------------------------------------------------
+
+HELP_TOPICS: dict[str, dict[str, str]] = {
+    "auc_pr": {
+        "title": "Why AUC-PR, not accuracy",
+        "body": (
+            "Fraud is rare: 3,083 of the 88,581 transactions in the held-out test "
+            "split are fraudulent, about 3.5%. A model that calls every single "
+            "transaction legitimate is therefore 96.5% accurate while catching "
+            "nothing, so accuracy cannot distinguish a useful model from a useless "
+            "one here. AUC-PR summarises the precision/recall trade-off across "
+            "every possible threshold and uses the rare class as its reference "
+            "point, so it moves when the model actually gets better at the job. "
+            "AUC-ROC is reported alongside it, but on data this imbalanced ROC "
+            "flatters weak models, because the large legitimate class dominates "
+            "its false-positive axis."
+        ),
+    },
+    "cost_ratio": {
+        "title": "What the value ratio means",
+        "body": (
+            "Currency caught for every unit of legitimate currency disrupted, "
+            "measured on the held-out test split. Precision and recall count "
+            "transactions and treat a 5 payment and a 5,000 payment as equal "
+            "events; this metric weighs them by the amount actually at stake, "
+            "which is closer to what the outcome is worth. Above 1.0 the flagged "
+            "set carries more fraudulent value than legitimate value. The "
+            "baseline sits below 1.0 and the graph variant above it, which is the "
+            "single clearest statement of what the graph features changed."
+        ),
+    },
+    "chronological_split": {
+        "title": "Why the split is chronological",
+        "body": (
+            "The data is cut by time: the earliest 70% of transactions train the "
+            "model, the next 15% tune it, and the final 15% test it. A random "
+            "shuffle would let the model learn from transactions that happened "
+            "after the ones it is scored on, which no deployed system can do, and "
+            "the resulting metric would be optimistic in a way that never survives "
+            "production. Each boundary is snapped past its tied-timestamp block so "
+            "no single instant straddles two splits, and every split is SHA-256 "
+            "checksummed into results/split_manifest.json — the evaluation scripts "
+            "refuse to run if a checksum has drifted."
+        ),
+    },
+    "leakage": {
+        "title": "How leakage is prevented structurally",
+        "body": (
+            "Not by discipline, by construction. No function in the training code "
+            "accepts the test frame at all, so a threshold or a hyperparameter "
+            "cannot be chosen using it — both come from the validation split only. "
+            "The streaming features carry the same rule down to the row: every "
+            "feature for a given transaction is computed from strictly earlier "
+            "transactions, on half-open windows, with ties broken deterministically. "
+            "Tests verify this against brute-force references and against "
+            "deliberately future-corrupted data."
+        ),
+    },
+    "graph_features": {
+        "title": "The causal graph features",
+        "body": (
+            "Twelve features describing how a card, email, device, or address has "
+            "co-occurred with others over the previous 24 hours and 7 days, plus a "
+            "48-hour exponentially-decayed measure of fraud among an entity's "
+            "neighbours. They are built by a single stateful pass that sees train, "
+            "then validation, then test in order, so each row's features reflect "
+            "only its own past. A first-time entity gets zeros rather than a "
+            "guess. This is the difference between the two variants compared on "
+            "the evidence page."
+        ),
+    },
+    "threshold": {
+        "title": "Where the decision threshold comes from",
+        "body": (
+            "Chosen on the validation split and then frozen before the test split "
+            "is scored even once. Tuning it against test results would be choosing "
+            "the answer after seeing the mark scheme, and the reported figures "
+            "would no longer describe unseen data. The committed value is in "
+            "results/pipeline_run_summary.json and in the model metadata."
+        ),
+    },
+    "llm_prose": {
+        "title": "Why the LLM only writes prose",
+        "body": (
+            "Everything a reader might act on is computed in Python before the "
+            "language model is called: the risk score, the confidence band, the "
+            "estimated cost of a false positive, and the recommendation, which is "
+            "one of a fixed set of values. The model receives those and writes the "
+            "summary paragraph — nothing else. It cannot change a score, pick a "
+            "recommendation, or introduce a number, so a hallucination costs you a "
+            "clumsy sentence rather than a wrong decision. When no API key is "
+            "configured the pipeline substitutes a deterministic template instead "
+            "of quietly degrading."
+        ),
+    },
+    "live_unscored": {
+        "title": "Why the live transaction carries no score",
+        "body": (
+            "The model was trained on the IEEE-CIS feature space: roughly 430 "
+            "engineered columns, including a large block of masked proprietary "
+            "features and the graph features derived from an entity's own history. "
+            "A payment webhook carries an amount, a currency, a method, an order "
+            "id and a timestamp. Those do not overlap. Padding the ~430 missing "
+            "features with zeros would return a number, but it would describe the "
+            "padding rather than the payment. This project already found and "
+            "deleted one metric that was an artifact of its data rather than its "
+            "model; it will not manufacture a second one to make a demo look "
+            "complete. So the item is stored and displayed as explicitly unscored."
+        ),
+    },
+    "human_decides": {
+        "title": "What the system does and does not do",
+        "body": (
+            "It scores, groups, explains, and queues for review. It has no code "
+            "path that can act on a payment in any direction, and automated tests "
+            "scan the source for one on every run. A recorded decision updates a "
+            "status field and appends a row to an audit log that is never edited "
+            "or deleted; a correction is a new row. The reviewer holds the "
+            "decision, and the record shows who made it and when."
+        ),
+    },
+    "spike": {
+        "title": "Transactions versus spikes",
+        "body": (
+            "A transaction item is one payment the model scored highly on its own. "
+            "A spike item is a burst: several risky transactions on the same card, "
+            "email, device, or address inside a rolling window, compared against "
+            "that entity's own earlier baseline rather than a global average. "
+            "Coordinated abuse tends to appear as the second shape, which a "
+            "per-transaction score alone reads as unrelated events."
+        ),
+    },
+    "dataset_gap": {
+        "title": "The India-market gap, stated plainly",
+        "body": (
+            "IEEE-CIS is real US card-not-present data. India's rails are "
+            "dominated by UPI, which differs in entity topology (virtual payment "
+            "addresses and device identifiers rather than card numbers and billing "
+            "addresses), in settlement speed (instant and around the clock, so "
+            "bursts unfold in seconds rather than hours), and in typology. No "
+            "synthetic UPI data was generated to paper over this, because "
+            "fabricated data would produce fabricated metrics. The gap is stated "
+            "rather than filled."
+        ),
+    },
+}
+
+# Reading this site is public; changing its state is not.
+#
+# The gate is drawn on the HTTP method rather than on a list of public paths,
+# and that direction matters. A path allowlist fails open: add a route, forget
+# to list it, and it is unprotected. This fails closed — a new route is public
+# only for as long as it is read-only, and the moment it accepts a POST it is
+# behind the password automatically. /health needs no special case any more; it
+# is a GET like every other public surface.
+SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 
 
 def _validate_note(raw: object) -> tuple[str | None, str | None]:
@@ -136,9 +301,9 @@ READ_ONLY = _env_flag("READ_ONLY")
 def _auth_configured() -> tuple[str, str] | None:
     """Basic-auth credentials, or None when auth is disabled.
 
-    Both variables must be set and non-empty. Absent them the app stays open,
-    which keeps local development and the test suite unchanged — the hosted
-    deployment is the place that sets them.
+    Both variables must be set and non-empty. Absent them mutations are open
+    too, which keeps local development and the test suite unchanged — the
+    hosted deployment is the place that sets them.
     """
     user = os.environ.get("DEMO_USER", "").strip()
     password = os.environ.get("DEMO_PASSWORD", "")
@@ -149,15 +314,25 @@ def _auth_configured() -> tuple[str, str] | None:
 
 @app.before_request
 def _require_basic_auth() -> Response | None:
-    """Gate every route behind HTTP basic auth, except UNAUTHENTICATED_PATHS.
+    """Gate state-changing requests behind HTTP basic auth. Reading is public.
 
-    Demo gating, not an identity system: one shared credential pair from the
-    environment. /health is exempt because the platform's readiness probe is
-    unauthenticated and a 401 there would fail the deploy; the Razorpay webhook
-    is exempt because Razorpay presents an HMAC signature rather than a
-    password, and that signature is checked on every request to it.
+    Every read surface — the landing page, the evidence page, the review queue,
+    the live-ingestion page, their JSON APIs, and the readiness probe — answers
+    without credentials. A reviewer opening the link is looking at the product
+    in the same second, which is the entire point of publishing it.
+
+    Authentication applies to the two routes that change something: recording a
+    reviewer decision, and creating a test-mode order. Demo gating, not an
+    identity system — one shared credential pair from the environment.
+
+    The Razorpay webhook is exempt because Razorpay presents an HMAC signature
+    rather than a password. That is not a hole: the signature is verified on
+    every request to it, which is the stronger of the two checks.
     """
-    if request.path in UNAUTHENTICATED_PATHS:
+    if request.method in SAFE_METHODS:
+        return None
+
+    if request.path == WEBHOOK_PATH:
         return None
 
     expected = _auth_configured()
@@ -201,15 +376,61 @@ def _serialize_item(item: dict) -> dict:
     return out
 
 
-@app.route("/")
-def index():
-    """Serve the dashboard and issue the CSRF token it will echo back.
+# ---------------------------------------------------------------------------
+# Committed evidence, read from results/ at request time.
+#
+# Every number the site displays comes from one of these files. Nothing is
+# computed here and nothing is hard-coded in a template: if a figure is not in
+# a committed artifact, it does not appear on the site. That is the same
+# no-fabricated-results rule the README states, enforced by having no other
+# source of numbers available to the page.
+#
+# Reading is stdlib json on three small files, so the dashboard's import chain
+# stays free of pandas and requirements-web.txt stays Flask + gunicorn.
+# ---------------------------------------------------------------------------
 
-    The same value goes into a SameSite=Strict cookie and into a meta tag, which
-    is the double-submit pair /api/resolve checks.
+RESULTS_DIR = Path("results")
+
+EVIDENCE_FILES = {
+    "phase_comparison": "phase_comparison.json",
+    "split_manifest": "split_manifest.json",
+    "pipeline_run": "pipeline_run_summary.json",
+}
+
+
+def load_evidence() -> dict:
+    """Read the committed result artifacts. A missing file yields None, not a 500.
+
+    The evidence page degrades to "not available in this deployment" for any
+    artifact it cannot read. An absent file is a deployment fact worth showing
+    plainly; it is never a reason to invent a number to fill the gap, and never
+    a reason to take the whole page down.
+    """
+    evidence: dict[str, object] = {}
+    for key, filename in EVIDENCE_FILES.items():
+        try:
+            with open(RESULTS_DIR / filename, encoding="utf-8") as handle:
+                evidence[key] = json.load(handle)
+        except (OSError, ValueError):
+            evidence[key] = None
+    return evidence
+
+
+def _render_page(template: str, **context):
+    """Render a page and plant the CSRF token it may need to echo back.
+
+    The same value goes into a SameSite=Strict cookie and into a meta tag; that
+    double-submit pair is what the mutation routes check. Every page carries it
+    rather than only the ones with buttons, so a control can move between
+    surfaces without silently losing its token.
     """
     token = request.cookies.get(CSRF_COOKIE_NAME) or secrets.token_urlsafe(32)
-    response = make_response(render_template("index.html", csrf_token=token))
+    response = make_response(render_template(
+        template,
+        csrf_token=token,
+        help_topics=HELP_TOPICS,
+        **context,
+    ))
     response.set_cookie(
         CSRF_COOKIE_NAME,
         token,
@@ -219,6 +440,30 @@ def index():
         path="/",
     )
     return response
+
+
+@app.route("/")
+def index():
+    """Public landing page: what this is, and the evidence behind the claim."""
+    return _render_page("landing.html", evidence=load_evidence(), active="home")
+
+
+@app.route("/metrics")
+def metrics_page():
+    """Public evidence page. Every figure traces to a file under results/."""
+    return _render_page("metrics.html", evidence=load_evidence(), active="metrics")
+
+
+@app.route("/demo")
+def demo_page():
+    """Public, read-only view of the review queue. Deciding still needs auth."""
+    return _render_page("demo.html", active="demo")
+
+
+@app.route("/live")
+def live_page():
+    """Public explanation of live ingestion, plus the test-mode trigger."""
+    return _render_page("live.html", active="live")
 
 
 @app.route("/api/pending")

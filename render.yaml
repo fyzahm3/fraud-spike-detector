@@ -11,6 +11,11 @@
 #     writes to a real SQLite file, but they reset to the committed snapshot on
 #     every redeploy. That is intentional for a demo instance.
 #   - Instances sleep when idle; the first request after a sleep takes ~30-50s.
+#     Point an external uptime monitor at /health every 5 minutes to keep the
+#     instance warm — that is the real fix, and /health is public and cheap
+#     precisely so it can be pinged. The client also shows a labelled "waking
+#     up" state rather than spinning silently, but nothing in the page can help
+#     until the container serves its first byte.
 #   - One worker, not two: the free instance has 512MB and 0.1 CPU, and this
 #     app is I/O-bound on SQLite. Threads give the concurrency; a second worker
 #     process would just duplicate the interpreter for no throughput gain.
@@ -28,10 +33,23 @@ services:
         value: "3.12.6"
       - key: DEMO_MODE
         value: "1"
-      # Basic-auth credentials. sync:false means Render prompts for the value in
-      # the dashboard instead of reading it from this committed file — never put
-      # the actual credentials here.
+      # Basic-auth credentials, applied to STATE-CHANGING requests only. Every
+      # page and every read API is public: a reviewer opening the link must see
+      # the product, not a password box. sync:false means Render prompts for the
+      # value in its dashboard rather than reading it from this committed file —
+      # never put the actual credentials here.
       - key: DEMO_USER
         sync: false
       - key: DEMO_PASSWORD
+        sync: false
+      # Razorpay TEST-MODE credentials for /live. The key id must carry the
+      # rzp_test_ prefix; anything else is refused before a network call is
+      # made, so this service cannot reach a live payment environment. Set all
+      # three in the Render dashboard, and register the webhook in the Razorpay
+      # dashboard against https://<your-service>/api/webhook/razorpay.
+      - key: RAZORPAY_KEY_ID
+        sync: false
+      - key: RAZORPAY_KEY_SECRET
+        sync: false
+      - key: RAZORPAY_WEBHOOK_SECRET
         sync: false
