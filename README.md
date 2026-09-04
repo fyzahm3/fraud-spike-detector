@@ -113,6 +113,24 @@ So the item is stored with `flagged_type="live_demo_unscored"`, distinct from `"
 
 ---
 
+## Running the Model, Live
+
+Every other number on the site is a measurement taken during evaluation and read from a committed file. `/metrics` also carries the model itself.
+
+Pick one of 17 real transactions from the held-out test split and the trained XGBoost booster — the same `artifacts/graph_model.json` that produced the metrics above — scores it inside the web process and returns the result. The number displayed was computed by that request, not looked up.
+
+**What is deployed, and what could not be.** The model is committed and loaded in the web process. The ~650MB IEEE-CIS dataset and the sequential graph-feature build that turns a raw transaction into 443 model features cannot run on a free instance, so the *inputs* are committed instead: `data/score_samples.json` holds the feature vectors the real pipeline produced for those transactions. The site therefore computes real predictions over real inputs; it does not featurize a new transaction from scratch.
+
+**The sample is not a highlight reel.** It spans the model's actual behaviour — its most confident catches, borderline calls either side of the threshold, three genuine false positives, and three frauds it missed. Selecting only clean hits would misrepresent the system to exactly the audience qualified to notice.
+
+**Ground truth is shown here**, because this is an evaluation surface and the point is to let a visitor check the model against reality, including where it is wrong. The reviewer's queue still contains no labels, so a reviewer is never shown the answer.
+
+**How this is kept honest.** `data/score_samples.json` records, per transaction, the score the full local pipeline computed. `tests/test_scoring.py::test_hosted_score_matches_the_pipelines_own_score` requires the hosted path to reproduce it to within 1e-12 — the same model over the same input is deterministic, so any drift means the input or the model is not what it claims. The catalogue API withholds that reference score, so the page cannot display a shipped number in place of a computed one. If the model fails to load, the endpoint returns 503 and the page says so; it never substitutes a plausible value.
+
+**Cost of this decision.** The web tier now installs numpy and xgboost: ~250MB resident with the booster loaded, against the free instance's 512MB, and ~2ms per prediction. That is a deliberate trade — earlier revisions kept the ML stack out of the web process to protect the build budget, and this replaces that constraint rather than forgetting it.
+
+---
+
 ## Defense-Only Policy
 
 This system is strictly **defense-only by design**:
@@ -143,7 +161,7 @@ cp .env.example .env
 # Edit .env and insert your GEMINI_API_KEY
 ```
 
-### 2. Run Test Suite (104/104 Passing)
+### 2. Run Test Suite (134/134 Passing)
 ```bash
 pytest
 ```

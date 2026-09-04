@@ -1,9 +1,20 @@
-# Web-only dependency set for the hosted dashboard (Render/Railway).
+# Web dependency set for the hosted dashboard (Render/Railway).
 #
-# app.py imports just Flask and src/explain/queue.py, which is stdlib sqlite3.
-# The ML stack (xgboost, pandas, numpy, scikit-learn, scipy) is NOT needed to
-# serve the committed demo snapshot and would push a free-tier build past its
-# time and disk budget, so it is deliberately excluded. Local development and
-# the test suite use the full requirements.txt.
+# This carries the real ML inference stack on purpose. The site does not merely
+# report the model's evaluation results; /metrics runs the trained booster in
+# this process to score a real held-out transaction, and that is the substance
+# of the project rather than a garnish on it. Serving a number the model did not
+# just produce, or reimplementing inference to avoid the dependency, were both
+# rejected.
+#
+# Cost, measured rather than assumed: numpy + xgboost + the loaded booster is
+# ~250MB resident against the instance's 512MB, and one prediction takes ~2ms
+# single-threaded. tests/test_scoring.py checks the model still loads and the
+# hosted score matches the pipeline's own.
+#
+# pandas, scikit-learn and scipy are still absent: nothing in app.py's import
+# chain needs them, and they would cost build budget for no served behaviour.
 flask==3.1.3
 gunicorn==23.0.0
+numpy==2.5.2
+xgboost==3.4.1

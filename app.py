@@ -28,6 +28,12 @@ import secrets
 from flask import Flask, Response, jsonify, make_response, render_template, request
 
 from src.explain.queue import ReviewQueue
+from src.serve.scorer import (
+    ScoringUnavailableError,
+    is_available as scoring_is_available,
+    list_samples,
+    score as score_sample,
+)
 from src.ingest.razorpay_live import (
     LIVE_DEMO_FLAGGED_TYPE,
     SIGNATURE_HEADER,
@@ -244,6 +250,20 @@ HELP_TOPICS: dict[str, dict[str, str]] = {
             "per-transaction score alone reads as unrelated events."
         ),
     },
+    "live_scoring": {
+        "body": (
+            "The trained XGBoost model is loaded in this web process and asked for a "
+            "prediction when you press the button, so the number you see was computed "
+            "then, not looked up. What is committed alongside the model is the input: "
+            "the feature vector the pipeline produced for a real held-out transaction. "
+            "That is a deployment constraint rather than a shortcut \u2014 the ~650MB "
+            "dataset and the sequential feature build that turns a raw transaction into "
+            "443 model features cannot run on a free instance. Ground truth is shown "
+            "here because this is an evaluation surface; the reviewer's queue still "
+            "contains no labels, so a reviewer is never shown the answer."
+        ),
+        "title": "What \u201crun the model\u201d means here",
+    },
     "dataset_gap": {
         "title": "The India-market gap, stated plainly",
         "body": (
@@ -451,7 +471,12 @@ def index():
 @app.route("/metrics")
 def metrics_page():
     """Public evidence page. Every figure traces to a file under results/."""
-    return _render_page("metrics.html", evidence=load_evidence(), active="metrics")
+    return _render_page(
+        "metrics.html",
+        evidence=load_evidence(),
+        active="metrics",
+        scoring_available=scoring_is_available(),
+    )
 
 
 @app.route("/demo")
@@ -686,6 +711,48 @@ def api_razorpay_webhook():
         "scored": False,
         "model_score": None,
     })
+
+
+# ---------------------------------------------------------------------------
+# Live scoring.
+#
+# The rest of the site reports what the model produced during evaluation. These
+# two routes make the model run: the real XGBoost booster, loaded in this
+# process, predicting on the committed feature vector of a real held-out
+# transaction. See src/serve/scorer.py for what is committed and what is
+# computed.
+# ---------------------------------------------------------------------------
+
+
+@app.route("/api/score/samples")
+def api_score_samples():
+    """The catalogue of real transactions available to score. No scores in it."""
+    try:
+        return jsonify({"status": "ok", "samples": list_samples()})
+    except ScoringUnavailableError as exc:
+        app.logger.warning("Live scoring unavailable: %s", exc)
+        return jsonify({"status": "unavailable", "error": str(exc)}), 503
+
+
+@app.route("/api/score/<sample_id>")
+def api_score(sample_id: str):
+    """Run the trained model over one real transaction and return its output.
+
+    A GET, because it changes nothing — which also keeps it public under the
+    method-based auth gate, so a visitor can exercise the model without a
+    password.
+
+    503 rather than a default score when the model cannot load: a number
+    returned without the model behind it would read as a prediction, and this
+    project does not publish those.
+    """
+    try:
+        return jsonify({"status": "ok", "result": score_sample(sample_id)})
+    except KeyError:
+        return jsonify({"status": "error", "error": "Unknown sample id."}), 404
+    except ScoringUnavailableError as exc:
+        app.logger.warning("Live scoring unavailable: %s", exc)
+        return jsonify({"status": "unavailable", "error": str(exc)}), 503
 
 
 @app.route("/health")

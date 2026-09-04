@@ -726,6 +726,126 @@
         });
     }
 
+    /* --- live scoring -----------------------------------------------------
+
+       The model runs server-side; this only asks it and renders the answer.
+       Every value is written with textContent, like everywhere else on the
+       site, and the score is whatever the response carried — there is no
+       client-side default to fall back on if the request fails.
+       --------------------------------------------------------------------- */
+
+    var STRATUM_LABELS = {
+        top_fraud: "Highest-scoring fraud",
+        borderline: "Borderline, near the threshold",
+        false_positive: "False positive \u2014 flagged but legitimate",
+        false_negative: "Missed fraud \u2014 not flagged",
+        clear_legitimate: "Clearly legitimate"
+    };
+
+    var OUTCOME_LABELS = {
+        true_positive: "Correct \u2014 fraud, and the model flagged it",
+        true_negative: "Correct \u2014 legitimate, and the model did not flag it",
+        false_positive: "Wrong \u2014 legitimate, but the model flagged it",
+        false_negative: "Wrong \u2014 fraud, and the model missed it"
+    };
+
+    function money2(value) {
+        return Number(value).toLocaleString("en-US", {
+            style: "currency", currency: "USD", minimumFractionDigits: 2
+        });
+    }
+
+    function scoreRow(label, value, className) {
+        return el("div", { className: "verdict__row" }, [
+            el("span", { className: "verdict__key", text: label }),
+            el("span", { className: "verdict__val " + (className || ""), text: value })
+        ]);
+    }
+
+    function renderScore(result) {
+        var correct = result.outcome === "true_positive" || result.outcome === "true_negative";
+
+        var head = el("div", { className: "verdict__head" }, [
+            el("span", {
+                className: "tag " + (result.flagged ? "tag--spike" : "tag--transaction"),
+                text: result.flagged ? "Flagged for review" : "Not flagged"
+            }),
+            el("span", {
+                className: "tag " + (correct ? "tag--correct" : "tag--wrong"),
+                text: correct ? "Model was right" : "Model was wrong"
+            })
+        ]);
+
+        var score = el("div", { className: "verdict__scoreblock" }, [
+            el("span", { className: "verdict__score num", text: result.model_score.toFixed(6) }),
+            el("span", { className: "verdict__score-label", text: "Risk score, computed just now" })
+        ]);
+
+        var rows = el("div", { className: "verdict__rows" }, [
+            scoreRow("Decision threshold", result.threshold.toFixed(6)),
+            scoreRow("Transaction ID", String(result.transaction_id)),
+            scoreRow("Amount", money2(result.amount)),
+            scoreRow("Ground truth", result.actual_label === 1 ? "Fraud" : "Legitimate"),
+            scoreRow("Outcome", OUTCOME_LABELS[result.outcome] || result.outcome,
+                     correct ? "verdict__val--good" : "verdict__val--bad"),
+            scoreRow("Features fed to the model", String(result.n_features)),
+            scoreRow("Model variant", result.variant)
+        ]);
+
+        return el("div", { className: "verdict" + (correct ? "" : " verdict--wrong") },
+                  [head, score, rows]);
+    }
+
+    function runScorer() {
+        var select = byId("scorer-select");
+        var button = byId("scorer-run");
+        var container = byId("scorer-result");
+        if (!select || !container) { return Promise.resolve(); }
+
+        if (button) { button.disabled = true; }
+        fill(container, [loadingPanel("Running the model\u2026")]);
+
+        return request("/api/score/" + encodeURIComponent(select.value))
+            .then(function (body) {
+                fill(container, [renderScore(body.result)]);
+            })
+            .catch(function (error) {
+                fill(container, [errorPanel(
+                    "The model did not return a score",
+                    "Nothing is shown in place of it \u2014 a number without the model " +
+                    "behind it would read as a prediction.",
+                    error.message,
+                    runScorer
+                )]);
+            })
+            .then(function () {
+                if (button) { button.disabled = false; }
+            });
+    }
+
+    function initScorer() {
+        var select = byId("scorer-select");
+        if (!select) { return; }
+
+        request("/api/score/samples").then(function (body) {
+            body.samples.forEach(function (sample) {
+                var label = (STRATUM_LABELS[sample.stratum] || sample.stratum) +
+                    " \u00b7 #" + sample.transaction_id + " \u00b7 " + money2(sample.amount);
+                select.appendChild(el("option", { text: label, attrs: { value: sample.id } }));
+            });
+            var run = byId("scorer-run");
+            if (run) { run.addEventListener("click", runScorer); }
+        }).catch(function (error) {
+            fill(byId("scorer-result"), [errorPanel(
+                "Live scoring is unavailable",
+                "The trained model could not be loaded on this instance. The measured " +
+                "figures above are unaffected; they are read from committed files.",
+                error.message,
+                initScorer
+            )]);
+        });
+    }
+
     /* --- view switching --------------------------------------------------- */
 
     function showView(name) {
@@ -805,6 +925,8 @@
     if (liveButton) {
         liveButton.addEventListener("click", triggerLiveTransaction);
     }
+
+    initScorer();
 
     if (byId("pending-container")) {
         showView("pending");

@@ -21,7 +21,14 @@ data/raw/
 !data/demo_review_queue.db
 
 # ---- Trained model artifacts ----
-/artifacts/
+# Ignore the directory's CONTENTS rather than the directory: git will not look
+# inside an excluded directory, so a negation below it never takes effect.
+/artifacts/*
+# ...except the trained model the hosted site actually runs. /metrics loads this
+# booster in-process to score a real transaction on request, so it is part of
+# the deployed application, not a local build product.
+!/artifacts/graph_model.json
+!/artifacts/graph_meta.json
 
 # ---- Python artifacts ----
 __pycache__/

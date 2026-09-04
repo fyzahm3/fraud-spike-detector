@@ -246,6 +246,43 @@
 </section>
 {% endif %}
 
+<section class="evidence-block" id="live-scoring">
+    <div class="section-head">
+        <h2>Run the model {{ h.help('live_scoring') }}</h2>
+        <p>
+            Everything above is a measurement taken during evaluation. This is the model
+            itself: pick a real transaction from the held-out test split and the trained
+            XGBoost booster scores it in this process, now.
+            <span class="provenance mono">artifacts/graph_model.json</span>
+        </p>
+    </div>
+
+    {% if not scoring_available %}
+    <div class="panel">
+        <h3>Live scoring is not available on this instance</h3>
+        <p>
+            The trained model or the committed sample transactions could not be loaded, so
+            no score is offered. The figures above are unaffected &mdash; they are read from
+            committed result files. No placeholder score is shown in place of a real one.
+        </p>
+    </div>
+    {% else %}
+    <div class="scorer">
+        <div class="scorer__controls">
+            <label class="scorer__label" for="scorer-select">Held-out transaction</label>
+            <select class="scorer__select" id="scorer-select" aria-describedby="scorer-help"></select>
+            <button class="btn btn--primary" type="button" id="scorer-run">Score it</button>
+        </div>
+        <p class="scorer__hint" id="scorer-help">
+            The sample spans the model's real behaviour &mdash; its most confident catches,
+            borderline calls, genuine false positives, and fraud it missed. The score is
+            computed on request; it is not read from a table.
+        </p>
+        <div id="scorer-result" aria-live="polite"></div>
+    </div>
+    {% endif %}
+</section>
+
 <section class="evidence-block">
     <div class="section-head">
         <h2>Methodology, stated as constraints</h2>
