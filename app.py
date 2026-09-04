@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Review Queue Dashboard (UI Track / Section 15).
 
-Minimal, modern web interface for human reviewers to inspect flagged transaction & spike risk briefs,
+Reviewer console for human analysts to inspect flagged transaction & spike risk briefs,
 view LLM-generated summaries and top contributing factors, and log resolution decisions.
 
 Defense-only: Contains ZERO transaction execution, blocking, or payment modification endpoints.
@@ -21,9 +21,10 @@ from __future__ import annotations
 import argparse
 import os
 from pathlib import Path
+import re
 import secrets
 
-from flask import Flask, Response, jsonify, render_template_string, request
+from flask import Flask, Response, jsonify, make_response, render_template, request
 
 from src.explain.queue import ReviewQueue
 
@@ -58,6 +59,50 @@ def _resolve_db_path() -> Path:
 # Module-level so tests and `main()` can point the app at another database by
 # assignment, which is the existing contract.
 DB_PATH = _resolve_db_path()
+
+# The three decisions a human reviewer can record. This mirrors ReviewQueue.resolve's
+# own whitelist rather than trusting it: a decision that reaches the append-only audit
+# log must have been made by a person, so the value is required and validated here at
+# the edge, never defaulted. There is no fallback action, by design.
+ALLOWED_REVIEWER_ACTIONS = frozenset(
+    {"resolved_true_positive", "resolved_false_positive", "escalated"}
+)
+
+# Reviewer notes are free text written by a human and replayed in the audit view.
+# Cap the length and reject C0/C7 control characters (newline and tab excepted, since
+# a reviewer legitimately writes multi-line notes) so nothing can smuggle terminal
+# escapes or NULs into a permanent record.
+MAX_NOTE_LENGTH = 2000
+_CONTROL_CHARACTERS = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]")
+
+# Double-submit CSRF: the token is issued as a SameSite=Strict cookie and echoed into
+# the page, and a mutation must present it in a header that a cross-origin form post
+# cannot set. No framework, no server-side session store.
+CSRF_COOKIE_NAME = "fsq_csrf_token"
+CSRF_HEADER_NAME = "X-CSRF-Token"
+
+
+def _validate_note(raw: object) -> tuple[str | None, str | None]:
+    """Return (note, error). Rejects non-strings, overlong text, and control bytes."""
+    if raw is None:
+        return "", None
+    if not isinstance(raw, str):
+        return None, "Field 'note' must be a string."
+    if len(raw) > MAX_NOTE_LENGTH:
+        return None, f"Field 'note' exceeds the {MAX_NOTE_LENGTH}-character limit."
+    if _CONTROL_CHARACTERS.search(raw):
+        return None, "Field 'note' contains disallowed control characters."
+    return raw, None
+
+
+def _csrf_token_is_valid() -> bool:
+    """Header token must be present and equal to the cookie token."""
+    cookie_token = request.cookies.get(CSRF_COOKIE_NAME, "")
+    header_token = request.headers.get(CSRF_HEADER_NAME, "")
+    if not cookie_token or not header_token:
+        return False
+    return secrets.compare_digest(cookie_token, header_token)
+
 
 # Read-only gating is deliberately SEPARATE from DEMO_MODE: the pitch demo needs
 # a working resolve button, and the hosted filesystem is ephemeral anyway, so
@@ -108,399 +153,24 @@ def _require_basic_auth() -> Response | None:
         {"WWW-Authenticate": 'Basic realm="Fraud-Spike Review Queue"'},
     )
 
-HTML_TEMPLATE = """
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Fraud-Spike Review Queue | Human-in-the-Loop Escalation</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <style>
-        :root {
-            --bg-dark: #0f172a;
-            --card-bg: rgba(30, 41, 59, 0.7);
-            --border-color: rgba(255, 255, 255, 0.1);
-            --text-primary: #f8fafc;
-            --text-muted: #94a3b8;
-            --accent-red: #ef4444;
-            --accent-amber: #f59e0b;
-            --accent-green: #10b981;
-            --accent-blue: #3b82f6;
-            --accent-purple: #8b5cf6;
-        }
-
-        body {
-            font-family: 'Inter', sans-serif;
-            background-color: var(--bg-dark);
-            color: var(--text-primary);
-            margin: 0;
-            padding: 24px;
-            line-height: 1.5;
-        }
-
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-        }
-
-        header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding-bottom: 20px;
-            border-bottom: 1px solid var(--border-color);
-            margin-bottom: 28px;
-        }
-
-        .title-group h1 {
-            margin: 0;
-            font-size: 1.75rem;
-            font-weight: 700;
-            background: linear-gradient(135deg, #60a5fa, #a78bfa);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-        }
-
-        .title-group p {
-            margin: 4px 0 0 0;
-            color: var(--text-muted);
-            font-size: 0.875rem;
-        }
-
-        .badge-defense {
-            background: rgba(16, 185, 129, 0.15);
-            color: #34d399;
-            border: 1px solid rgba(52, 211, 153, 0.3);
-            padding: 6px 14px;
-            border-radius: 20px;
-            font-size: 0.75rem;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-        }
-
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-            gap: 16px;
-            margin-bottom: 32px;
-        }
-
-        .stat-card {
-            background: var(--card-bg);
-            border: 1px solid var(--border-color);
-            border-radius: 12px;
-            padding: 20px;
-            backdrop-filter: blur(10px);
-        }
-
-        .stat-card .label {
-            font-size: 0.75rem;
-            text-transform: uppercase;
-            color: var(--text-muted);
-            font-weight: 600;
-        }
-
-        .stat-card .value {
-            font-size: 1.875rem;
-            font-weight: 700;
-            margin-top: 6px;
-        }
-
-        .queue-section h2 {
-            font-size: 1.25rem;
-            margin-bottom: 16px;
-        }
-
-        .card {
-            background: var(--card-bg);
-            border: 1px solid var(--border-color);
-            border-radius: 14px;
-            padding: 24px;
-            margin-bottom: 20px;
-            backdrop-filter: blur(12px);
-            transition: transform 0.2s, border-color 0.2s;
-        }
-
-        .card:hover {
-            border-color: rgba(96, 165, 250, 0.4);
-        }
-
-        .card-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 16px;
-        }
-
-        .entity-info {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-
-        .entity-id {
-            font-size: 1.1rem;
-            font-weight: 700;
-        }
-
-        .type-tag {
-            padding: 4px 10px;
-            border-radius: 6px;
-            font-size: 0.75rem;
-            font-weight: 600;
-            text-transform: uppercase;
-        }
-
-        .type-tag.spike {
-            background: rgba(239, 68, 68, 0.2);
-            color: #fca5a5;
-            border: 1px solid rgba(239, 68, 68, 0.4);
-        }
-
-        .type-tag.transaction {
-            background: rgba(59, 130, 246, 0.2);
-            color: #93c5fd;
-            border: 1px solid rgba(59, 130, 246, 0.4);
-        }
-
-        .score-box {
-            text-align: right;
-        }
-
-        .score-value {
-            font-size: 1.25rem;
-            font-weight: 700;
-            color: var(--accent-red);
-        }
-
-        .score-label {
-            font-size: 0.7rem;
-            color: var(--text-muted);
-        }
-
-        .brief-box {
-            background: rgba(15, 23, 42, 0.6);
-            border-left: 4px solid var(--accent-purple);
-            padding: 14px 16px;
-            border-radius: 0 8px 8px 0;
-            margin-bottom: 20px;
-        }
-
-        .brief-box p {
-            margin: 0;
-            font-size: 0.925rem;
-            color: #e2e8f0;
-        }
-
-        .factors-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-bottom: 20px;
-            font-size: 0.85rem;
-        }
-
-        .factors-table th {
-            text-align: left;
-            color: var(--text-muted);
-            padding: 8px 12px;
-            border-bottom: 1px solid var(--border-color);
-            font-weight: 600;
-        }
-
-        .factors-table td {
-            padding: 8px 12px;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-        }
-
-        .action-bar {
-            display: flex;
-            gap: 12px;
-            align-items: center;
-            justify-content: flex-end;
-            padding-top: 12px;
-            border-top: 1px solid var(--border-color);
-        }
-
-        .btn {
-            padding: 8px 16px;
-            border-radius: 8px;
-            font-size: 0.85rem;
-            font-weight: 600;
-            cursor: pointer;
-            border: none;
-            transition: opacity 0.2s, transform 0.1s;
-        }
-
-        .btn:hover {
-            opacity: 0.9;
-        }
-
-        .btn:active {
-            transform: scale(0.97);
-        }
-
-        .btn-tp {
-            background: var(--accent-red);
-            color: white;
-        }
-
-        .btn-fp {
-            background: rgba(255, 255, 255, 0.1);
-            color: var(--text-primary);
-            border: 1px solid var(--border-color);
-        }
-
-        .btn-escalate {
-            background: var(--accent-purple);
-            color: white;
-        }
-
-        .empty-state {
-            text-align: center;
-            padding: 48px;
-            color: var(--text-muted);
-            background: var(--card-bg);
-            border-radius: 12px;
-            border: 1px dashed var(--border-color);
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <header>
-            <div class="title-group">
-                <h1>Fraud-Spike Review Queue</h1>
-                <p>Human-Gated Escalation Dashboard • Defense-Only Audit Trail</p>
-            </div>
-            <div class="badge-defense">🛡️ Defense-Only System</div>
-        </header>
-
-        <div class="stats-grid">
-            <div class="stat-card">
-                <div class="label">Pending Queue Items</div>
-                <div class="value" id="stat-pending">0</div>
-            </div>
-            <div class="stat-card">
-                <div class="label">Total Risk Score Avg</div>
-                <div class="value" id="stat-avg-score">0.00</div>
-            </div>
-            <div class="stat-card">
-                <div class="label">Estimated FP Cost at Risk</div>
-                <div class="value" id="stat-fp-cost">$0</div>
-            </div>
-        </div>
-
-        <div class="queue-section">
-            <h2>Pending Items requiring Review</h2>
-            <div id="queue-container">Loading review queue...</div>
-        </div>
-    </div>
-
-    <script>
-        async function fetchQueue() {
-            const res = await fetch('/api/pending');
-            const data = await res.json();
-            renderQueue(data);
-        }
-
-        function renderQueue(items) {
-            document.getElementById('stat-pending').innerText = items.length;
-
-            if (items.length === 0) {
-                document.getElementById('stat-avg-score').innerText = '0.00';
-                document.getElementById('stat-fp-cost').innerText = '$0';
-                document.getElementById('queue-container').innerHTML = `
-                    <div class="empty-state">
-                        <h3>No Pending Reviews</h3>
-                        <p>All flagged transactions and spike events have been reviewed.</p>
-                    </div>
-                `;
-                return;
-            }
-
-            const avgScore = (items.reduce((sum, item) => sum + item.model_score, 0) / items.length).toFixed(3);
-            const totalCost = items.reduce((sum, item) => sum + item.estimated_fp_cost, 0).toLocaleString('en-US', {style: 'currency', currency: 'USD'});
-
-            document.getElementById('stat-avg-score').innerText = avgScore;
-            document.getElementById('stat-fp-cost').innerText = totalCost;
-
-            const html = items.map(item => `
-                <div class="card" id="item-${item.id}">
-                    <div class="card-header">
-                        <div class="entity-info">
-                            <span class="entity-id">Entity ${item.entity_id}</span>
-                            <span class="type-tag ${item.flagged_type}">${item.flagged_type}</span>
-                            <span style="font-size:0.8rem; color:var(--text-muted);">Confidence: <b>${item.confidence}</b></span>
-                        </div>
-                        <div class="score-box">
-                            <div class="score-value">${item.model_score.toFixed(4)}</div>
-                            <div class="score-label">Risk Score</div>
-                        </div>
-                    </div>
-
-                    <div class="brief-box">
-                        <p><strong>LLM Risk Brief:</strong> ${item.summary_text}</p>
-                    </div>
-
-                    <table class="factors-table">
-                        <thead>
-                            <tr>
-                                <th>Top Contributing Feature</th>
-                                <th>Value</th>
-                                <th>Direction</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${item.top_factors.map(f => `
-                                <tr>
-                                    <td><code>${f.feature}</code></td>
-                                    <td>${typeof f.value === 'number' ? f.value.toFixed(2) : f.value}</td>
-                                    <td style="color:${f.direction === 'increases_risk' ? '#f87171' : '#6ee7b7'}">${f.direction}</td>
-                                </tr>
-                            `).join('')}
-                        </tbody>
-                    </table>
-
-                    <div class="action-bar">
-                        <span style="font-size:0.8rem; color:var(--text-muted); margin-right:auto;">
-                            Rec. Action: <strong>${item.recommended_action}</strong> | FP Cost Est: $${item.estimated_fp_cost.toLocaleString()}
-                        </span>
-                        <button class="btn btn-fp" onclick="resolveItem(${item.id}, 'resolved_false_positive')">Dismiss False Positive</button>
-                        <button class="btn btn-escalate" onclick="resolveItem(${item.id}, 'escalated')">Escalate for Review</button>
-                        <button class="btn btn-tp" onclick="resolveItem(${item.id}, 'resolved_true_positive')">Confirm True Positive</button>
-                    </div>
-                </div>
-            `).join('');
-
-            document.getElementById('queue-container').innerHTML = html;
-        }
-
-        async function resolveItem(queueId, action) {
-            const note = prompt(`Optional reviewer note for ${action}:`) || "";
-            const res = await fetch(`/api/resolve/${queueId}`, {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({action: action, note: note})
-            });
-            if (res.ok) {
-                fetchQueue();
-            } else {
-                alert('Failed to resolve item.');
-            }
-        }
-
-        fetchQueue();
-    </script>
-</body>
-</html>
-"""
-
-
 @app.route("/")
 def index():
-    return render_template_string(HTML_TEMPLATE)
+    """Serve the dashboard and issue the CSRF token it will echo back.
+
+    The same value goes into a SameSite=Strict cookie and into a meta tag, which
+    is the double-submit pair /api/resolve checks.
+    """
+    token = request.cookies.get(CSRF_COOKIE_NAME) or secrets.token_urlsafe(32)
+    response = make_response(render_template("index.html", csrf_token=token))
+    response.set_cookie(
+        CSRF_COOKIE_NAME,
+        token,
+        samesite="Strict",
+        httponly=False,  # the page's own script must read it to echo it back
+        secure=request.is_secure,
+        path="/",
+    )
+    return response
 
 
 @app.route("/api/pending")
@@ -508,6 +178,40 @@ def api_pending():
     queue = ReviewQueue(db_path=DB_PATH)
     items = queue.list_pending()
     return jsonify(items)
+
+
+@app.route("/api/audit")
+def api_audit():
+    """Flattened audit trail: one entry per recorded decision, newest first.
+
+    The audit log is a named requirement of the track and the strongest part of
+    this architecture, so the console shows it as a peer view rather than hiding
+    it behind a row. Item context is joined in here so the client renders a table
+    without a second round trip per row.
+
+    Reads only. The queue's public surface is fixed at four methods, so resolved
+    rows come from list_pending's `status` argument rather than a new method.
+    """
+    queue = ReviewQueue(db_path=DB_PATH)
+    entries: list[dict] = []
+    for status in sorted(ALLOWED_REVIEWER_ACTIONS):
+        for item in queue.list_pending(status=status):
+            for record in queue.get_audit_log(item["id"]):
+                entries.append({
+                    "audit_id": record["id"],
+                    "queue_id": item["id"],
+                    "entity_id": item["entity_id"],
+                    "flagged_type": item["flagged_type"],
+                    "model_score": item["model_score"],
+                    "reviewer_action": record["reviewer_action"],
+                    "note": record["note"],
+                    "timestamp": record["timestamp"],
+                })
+
+    # Newest first, with audit_id as the tiebreak: timestamp has one-second
+    # granularity, so several decisions in the same second need a stable order.
+    entries.sort(key=lambda e: (e["timestamp"], e["audit_id"]), reverse=True)
+    return jsonify(entries)
 
 
 @app.route("/api/resolve/<int:queue_id>", methods=["POST"])
@@ -518,9 +222,33 @@ def api_resolve(queue_id: int):
             "error": "This instance is running read-only; resolutions are disabled.",
         }), 403
 
-    data = request.get_json() or {}
-    action = data.get("action", "resolved_true_positive")
-    note = data.get("note", "")
+    if not _csrf_token_is_valid():
+        return jsonify({
+            "status": "error",
+            "error": "Missing or invalid CSRF token.",
+        }), 403
+
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({
+            "status": "error",
+            "error": "Request body must be a JSON object.",
+        }), 400
+
+    # No default. A resolution recorded without an explicit human choice would be a
+    # decision nobody made, written to an append-only log — the one failure this
+    # project cannot ship. Absent or unrecognised action is a 400, never a guess.
+    action = data.get("action")
+    if action not in ALLOWED_REVIEWER_ACTIONS:
+        return jsonify({
+            "status": "error",
+            "error": "Field 'action' is required and must be one of: "
+                     + ", ".join(sorted(ALLOWED_REVIEWER_ACTIONS)),
+        }), 400
+
+    note, note_error = _validate_note(data.get("note", ""))
+    if note_error is not None:
+        return jsonify({"status": "error", "error": note_error}), 400
 
     queue = ReviewQueue(db_path=DB_PATH)
     queue.resolve(queue_id, reviewer_action=action, note=note)
@@ -543,7 +271,9 @@ def health():
         "database": str(DB_PATH),
     }
     try:
-        status["pending_items"] = len(ReviewQueue(db_path=DB_PATH).list_pending(limit=1))
+        # Full count, not a limit=1 probe: this field is read as queue depth
+        # (the README quotes it), so it has to be the number it claims to be.
+        status["pending_items"] = len(ReviewQueue(db_path=DB_PATH).list_pending())
         status["database_reachable"] = True
     except Exception as exc:  # surface the reason rather than a bare 500
         status["status"] = "degraded"

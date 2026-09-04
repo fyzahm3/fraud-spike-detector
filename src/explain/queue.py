@@ -144,36 +144,56 @@ class ReviewQueue:
             ))
             return int(cur.lastrowid)
 
-    def list_pending(self, limit: int | None = None, offset: int = 0) -> list[dict]:
-        """List pending items in the review queue, highest risk first.
+    def list_pending(
+        self,
+        limit: int | None = None,
+        offset: int = 0,
+        status: str = "pending",
+    ) -> list[dict]:
+        """List review-queue items with the given status, highest risk first.
 
-        Defaults (limit=None, offset=0) return every pending row — identical to
-        the pre-pagination behaviour, so existing callers are unaffected.
-        `id ASC` is a final tiebreak: created_at has one-second granularity, so
-        without it rows enqueued in the same second have no stable order and a
-        paged read could skip or repeat one.
+        Defaults (limit=None, offset=0, status="pending") return every pending
+        row — identical to the pre-pagination behaviour, so existing callers are
+        unaffected. `id ASC` is a final tiebreak: created_at has one-second
+        granularity, so without it rows enqueued in the same second have no
+        stable order and a paged read could skip or repeat one.
+
+        `status` is a signature extension rather than a second method, because
+        the public surface of this class is fixed at four methods and asserted
+        by tests/test_explain.py::test_no_blocking_side_effects. The dashboard's
+        audit-trail view needs resolved rows; it gets them here. The name stays
+        `list_pending` for the same reason — renaming it would break the API
+        assertion just as surely as adding to it.
+
+        Passing a status the queue never writes returns an empty list rather
+        than raising: an unknown status is a query that matches nothing, not a
+        programming error.
         """
         if limit is not None and limit < 0:
             raise ValueError(f"limit must be non-negative, got {limit}")
         if offset < 0:
             raise ValueError(f"offset must be non-negative, got {offset}")
+        if not isinstance(status, str) or not status:
+            raise ValueError(f"status must be a non-empty string, got {status!r}")
 
+        # Parameterised, so the (status, model_score DESC, created_at ASC, id ASC)
+        # index still serves every status the same way it served the literal.
         sql = """
             SELECT id, entity_id, flagged_type, model_score, confidence,
                    estimated_fp_cost, recommended_action, summary_text,
                    top_factors_json, status, created_at
             FROM review_queue
-            WHERE status = 'pending'
+            WHERE status = ?
             ORDER BY model_score DESC, created_at ASC, id ASC
         """
-        params: list[int] = []
+        params: list[object] = [status]
         if limit is not None:
             sql += " LIMIT ? OFFSET ?"
-            params = [int(limit), int(offset)]
+            params += [int(limit), int(offset)]
         elif offset:
             # SQLite requires a LIMIT before OFFSET; -1 means "no limit".
             sql += " LIMIT -1 OFFSET ?"
-            params = [int(offset)]
+            params += [int(offset)]
 
         with closing(self._get_conn()) as conn:
             cur = conn.cursor()

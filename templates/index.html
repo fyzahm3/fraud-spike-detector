@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fraud-Spike Review Queue</title>
+    <meta name="csrf-token" content="{{ csrf_token }}">
+    <meta name="description" content="Human-gated review console for flagged transaction and spike risk briefs.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/console.css') }}">
+</head>
+<body>
+    <header class="masthead">
+        <div class="shell masthead__inner">
+            <div class="masthead__identity">
+                <h1 class="masthead__title">Fraud-Spike Review Queue</h1>
+                <p class="masthead__standfirst">Flagged transactions and spike events awaiting a human decision</p>
+            </div>
+            <dl class="masthead__meta">
+                <div>
+                    <dt>Source</dt>
+                    <dd>IEEE-CIS held-out split</dd>
+                </div>
+                <div>
+                    <dt>Model</dt>
+                    <dd>XGBoost + causal graph</dd>
+                </div>
+                <div>
+                    <dt>Decision authority</dt>
+                    <dd>Human reviewer</dd>
+                </div>
+            </dl>
+        </div>
+    </header>
+
+    <p class="disclosure">
+        <span class="shell">
+            <strong>Defense-only.</strong>
+            No control in this interface can block, hold, or cancel a payment, and the system
+            executes no financial action of any kind. A decision recorded here updates a status
+            field and appends one row to an immutable audit log &mdash; nothing is ever deleted or
+            overwritten. The model scores and explains; the reviewer decides.
+        </span>
+    </p>
+
+    <main class="shell">
+        <h2 class="visually-hidden">Queue overview</h2>
+        <div class="metrics">
+            <div class="metric">
+                <p class="metric__label">Awaiting review</p>
+                <p class="metric__value num" id="metric-pending">&mdash;</p>
+                <p class="metric__note" id="metric-pending-note">&nbsp;</p>
+            </div>
+            <div class="metric">
+                <p class="metric__label">Mean risk score</p>
+                <p class="metric__value num" id="metric-score">&mdash;</p>
+                <p class="metric__note" id="metric-score-note">&nbsp;</p>
+            </div>
+            <div class="metric">
+                <p class="metric__label">Est. false-positive cost</p>
+                <p class="metric__value num" id="metric-cost">&mdash;</p>
+                <p class="metric__note">Disrupted value if every pending item is legitimate</p>
+            </div>
+            <div class="metric">
+                <p class="metric__label">Decisions recorded</p>
+                <p class="metric__value num" id="metric-resolved">&mdash;</p>
+                <p class="metric__note">Append-only, this instance</p>
+            </div>
+        </div>
+
+        <div class="views" role="tablist" aria-label="Console views">
+            <button class="view-tab" type="button" role="tab" id="tab-pending"
+                    aria-controls="view-pending" aria-selected="true" data-view="pending">
+                Pending review<span class="view-tab__count num" id="count-pending">0</span>
+            </button>
+            <button class="view-tab" type="button" role="tab" id="tab-audit"
+                    aria-controls="view-audit" aria-selected="false" data-view="audit">
+                Audit trail<span class="view-tab__count num" id="count-audit">0</span>
+            </button>
+        </div>
+
+        <section id="view-pending" role="tabpanel" aria-labelledby="tab-pending" tabindex="-1">
+            <div class="section-head">
+                <h2>Briefs awaiting a decision</h2>
+                <p>Ordered by model risk score, highest first. Every factor shown is a model input, not a conclusion.</p>
+            </div>
+            <div id="pending-container" aria-live="polite" aria-busy="true"></div>
+        </section>
+
+        <section id="view-audit" role="tabpanel" aria-labelledby="tab-audit" tabindex="-1" hidden>
+            <div class="section-head">
+                <h2>Recorded decisions</h2>
+                <p>Every resolution written to the append-only audit log, newest first. Rows are never edited or removed; a correction is a new row.</p>
+            </div>
+            <div id="audit-container" aria-live="polite"></div>
+        </section>
+
+        <footer class="colophon">
+            <p>
+                Counts and scores on this page are read from the review-queue database this
+                instance is serving. Ground-truth fraud labels are deliberately not present in
+                that database, so the console shows a reviewer exactly what a reviewer would see.
+            </p>
+            <p>
+                Independent hackathon submission. Not affiliated with, endorsed by, or a product of
+                any payment provider.
+            </p>
+        </footer>
+    </main>
+
+    <script src="{{ url_for('static', filename='js/console.js') }}"></script>
+</body>
+</html>

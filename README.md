@@ -1,7 +1,7 @@
 # Fraud-Spike Detector with Explainable, Human-Gated Escalation
 
 [![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue.svg)](https://www.python.org/)
-[![Tests](https://img.shields.io/badge/tests-62%20passed-success.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-91%20passed-success.svg)](tests/)
 [![License](https://img.shields.io/badge/defense--only-strictly%20human--gated-orange.svg)](#defense-only-policy)
 
 An end-to-end fraud-spike detection system for card payments and digital transaction rails. Scores individual transaction risk, aggregates rolling entity velocity and graph signals to detect anomalous **spikes** (bursts of fraudulent activity), and generates auditable, human-readable risk briefs routed to a review queue. **Defense-only by design** — the system flags and explains; human reviewers retain 100% decision authority.
@@ -125,11 +125,11 @@ cp .env.example .env
 # Edit .env and insert your GEMINI_API_KEY
 ```
 
-### 2. Run Test Suite (70/70 Passing)
+### 2. Run Test Suite (91/91 Passing)
 ```bash
 pytest
 ```
-*Executes unit tests, chronological time-split leakage checks (`test_features_match_brute_force_past_only`), half-open boundary assertions, LLM schema tests, PaySim split-logic tests, review-queue concurrency and index tests, UI endpoints, deployment surface tests (health check, basic auth, read-only gating, demo-snapshot honesty), and end-to-end integration tests in ~35s.*
+*Executes unit tests, chronological time-split leakage checks (`test_features_match_brute_force_past_only`), half-open boundary assertions, LLM schema tests, PaySim split-logic tests, review-queue concurrency and index tests, UI endpoints, dashboard security tests (XSS payload handling, required-action validation, CSRF double-submit, note bounds), deployment surface tests (health check, basic auth, read-only gating, demo-snapshot honesty), and end-to-end integration tests in ~31s.*
 
 ### 3. Execute End-to-End Pipeline & Dashboard
 ```bash
@@ -142,15 +142,46 @@ python app.py
 
 ## Review Queue Dashboard (UI Track)
 
-A lightweight human-in-the-loop dashboard (`app.py`) is provided for security analysts to inspect enqueued risk briefs, view LLM explanations and contributing features, and log resolution audit decisions:
+A reviewer console for fraud analysts: inspect enqueued risk briefs, read the model's contributing factors, and record a decision against each one.
 
 ```bash
 python app.py --port 5050
 ```
 
-- Open `http://localhost:5050` in a browser.
-- Review pending transaction & spike briefs.
-- Log decisions (`Confirm True Positive`, `Dismiss False Positive`, `Escalate`) — all actions are append-only written to SQLite audit log with **zero transaction-blocking side effects**.
+Open `http://localhost:5050`. The console has two views:
+
+| View | What it shows |
+|---|---|
+| **Pending review** | Briefs awaiting a decision, ordered by model risk score. Each carries the entity, flagged type, score, confidence, the risk brief, and the top contributing model features with their direction. Decisions are `Dismiss as false positive`, `Escalate`, and `Confirm fraud`, each with an inline reviewer-note field. |
+| **Audit trail** | Every decision written to the append-only log — item, entity, score, decision, reviewer note, and timestamp, newest first. Rows are never edited or removed; a correction is a new row. |
+
+### Structure
+
+The interface is plain HTML/CSS/JS served by Flask. No framework, no build step, no npm.
+
+```
+templates/index.html        # server-rendered shell
+static/css/console.css      # design system (tokens, layout, states)
+static/js/console.js        # queue rendering, decisions, view switching
+```
+
+`app.py` serves it and exposes `GET /api/pending`, `GET /api/audit`, `POST /api/resolve/<id>`, and `GET /health`.
+
+### Security properties
+
+- **No payment-action code.** No control can block, hold, or cancel a transaction. `tests/test_ui.py::test_ui_no_blocking_payment_actions` scans `app.py`, `templates/`, and `static/` for payment-action terms — the scan follows the code, so extracting the template did not shrink its coverage.
+- **Output is escaped structurally.** Queue data reaches the page through `textContent` on constructed DOM nodes; nothing is assigned to `innerHTML`. This matters because `summary_text` is LLM-generated. A test enqueues a brief whose fields carry a script payload and asserts it is never executable markup.
+- **A decision is always explicit.** `POST /api/resolve` requires `action` and validates it against the three allowed values. There is no default — a resolution recorded without a human choice would be a decision nobody made, in an append-only log.
+- **CSRF protected.** Double-submit token: a `SameSite=Strict` cookie issued with the page, echoed in an `X-CSRF-Token` header that a cross-origin form post cannot set.
+- **Reviewer notes are bounded.** 2000 characters, control characters rejected (newline and tab allowed), non-strings rejected.
+
+### Design
+
+The visual direction is recorded in [`DESIGN.md`](DESIGN.md): a light, data-dense financial console taking its palette, spacing, radii, and type scale from **Blade**, Razorpay's open-source design system (MIT). Tokens were read from `packages/blade/src/tokens/global/` and converted from Blade's `hsla()` definitions — real values, not approximations.
+
+Design language only. No Blade dependency (it is a React library; this is server-rendered Flask), and no Razorpay logo, wordmark, or symbol. This is an independent submission to Razorpay, not a product by them.
+
+Measured on the built result: 36 distinct text-on-background pairs across both views, **none below WCAG AA**; placeholder text at 4.91:1.
 
 ---
 
@@ -161,10 +192,15 @@ python app.py --port 5050
 **Health check (unauthenticated):** <https://fraud-spike-review-queue.onrender.com/health>
 
 ```console
-$ curl -s https://fraud-spike-review-queue.onrender.com/health
+$ DEMO_MODE=1 DEMO_USER=demo DEMO_PASSWORD=localtest \
+    gunicorn app:app --bind 127.0.0.1:5099 &
+$ curl -s http://127.0.0.1:5099/health
 {"auth_enabled":true,"database":"data/demo_review_queue.db","database_reachable":true,
- "demo_mode":true,"pending_items":1,"read_only":false,"status":"ok"}
+ "demo_mode":true,"pending_items":30,"read_only":false,"status":"ok"}
 ```
+
+Measured locally against the committed snapshot the hosted instance serves. `pending_items`
+is the full queue depth; the deployed instance reports it once the current commit is redeployed.
 
 ### What the hosted instance actually serves
 
@@ -282,6 +318,11 @@ The web dependency set was additionally **dry-run installed into a clean virtual
 ├── evaluate.py                   # Single-pass held-out test evaluation script
 ├── run_pipeline.py               # End-to-end integration pipeline & benchmark script
 ├── app.py                        # Flask review dashboard (gunicorn-served in production)
+├── templates/index.html          # dashboard shell (extracted from app.py)
+├── static/css/console.css        # design system — see DESIGN.md
+├── static/js/console.js          # queue rendering and decision flow
+├── PRODUCT.md                    # durable product context (audience, constraints, evidence)
+├── DESIGN.md                     # visual direction, tokens, and recorded design decisions
 ├── render.yaml                   # Render blueprint for the hosted demo instance
 ├── Procfile                      # Process definition for Procfile-based platforms
 ├── requirements-web.txt          # Flask + gunicorn only; dashboard deploy dependencies
@@ -293,7 +334,7 @@ The web dependency set was additionally **dry-run installed into a clean virtual
 │   ├── models/                   # XGBoost training, thresholding & cost metrics
 │   ├── spike/                    # Phase 3 SpikeScorer (1h/24h) & SpikeEvent detection
 │   └── explain/                  # Phase 4 RiskBrief generator & SQLite ReviewQueue
-├── tests/                        # 70 unit, leakage, concurrency, deployment, and integration tests
+├── tests/                        # 91 unit, leakage, concurrency, deployment, security, UI, and integration tests
 └── results/                      # Committed metrics, manifests, and run summaries
 ```
 
