@@ -28,13 +28,19 @@ except ImportError:
 class ContributingFactor:
     feature: str
     value: float | str
-    direction: Literal["increases_risk", "decreases_risk"]
+    # "not_a_model_input" is used only by src/ingest: a live-ingested payment
+    # carries observed payload fields, which are not features this model was
+    # trained on and must not be presented as risk evidence in either direction.
+    direction: Literal["increases_risk", "decreases_risk", "not_a_model_input"]
 
 
 @dataclass
 class RiskBrief:
     entity_id: str
-    flagged_type: Literal["transaction", "spike"]
+    # "transaction" and "spike" both mean the model scored this item.
+    # "live_demo_unscored" (src/ingest) means the opposite, and model_score
+    # carries a sentinel the API renders as null rather than a number.
+    flagged_type: Literal["transaction", "spike", "live_demo_unscored"]
     model_score: float
     top_factors: list[ContributingFactor]
     confidence: Literal["low", "medium", "high"]      # derived from score distance from threshold

@@ -19,6 +19,7 @@ convenient path locally. See `_env_*` helpers below.
 from __future__ import annotations
 
 import argparse
+import json
 import os
 from pathlib import Path
 import re
@@ -27,6 +28,19 @@ import secrets
 from flask import Flask, Response, jsonify, make_response, render_template, request
 
 from src.explain.queue import ReviewQueue
+from src.ingest.razorpay_live import (
+    LIVE_DEMO_FLAGGED_TYPE,
+    SIGNATURE_HEADER,
+    UNSCORED_MODEL_SCORE,
+    LiveIngestionError,
+    RazorpayConfigError,
+    build_live_demo_brief,
+    create_test_order,
+    extract_event_id,
+    load_credentials,
+    record_event_id,
+    verify_webhook_signature,
+)
 
 app = Flask(__name__)
 
@@ -81,6 +95,15 @@ _CONTROL_CHARACTERS = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]")
 CSRF_COOKIE_NAME = "fsq_csrf_token"
 CSRF_HEADER_NAME = "X-CSRF-Token"
 
+# Razorpay signs its webhook deliveries; it cannot present basic-auth
+# credentials. This path is therefore exempt from the shared demo password and
+# authenticates by HMAC signature instead, which is the stronger of the two.
+WEBHOOK_PATH = "/api/webhook/razorpay"
+
+# Paths that must answer without the demo credentials: the platform's readiness
+# probe, and the webhook (see above).
+UNAUTHENTICATED_PATHS = frozenset({"/health", WEBHOOK_PATH})
+
 
 def _validate_note(raw: object) -> tuple[str | None, str | None]:
     """Return (note, error). Rejects non-strings, overlong text, and control bytes."""
@@ -126,13 +149,15 @@ def _auth_configured() -> tuple[str, str] | None:
 
 @app.before_request
 def _require_basic_auth() -> Response | None:
-    """Gate every route except /health behind HTTP basic auth.
+    """Gate every route behind HTTP basic auth, except UNAUTHENTICATED_PATHS.
 
     Demo gating, not an identity system: one shared credential pair from the
     environment. /health is exempt because the platform's readiness probe is
-    unauthenticated and a 401 there would fail the deploy.
+    unauthenticated and a 401 there would fail the deploy; the Razorpay webhook
+    is exempt because Razorpay presents an HMAC signature rather than a
+    password, and that signature is checked on every request to it.
     """
-    if request.path == "/health":
+    if request.path in UNAUTHENTICATED_PATHS:
         return None
 
     expected = _auth_configured()
@@ -152,6 +177,29 @@ def _require_basic_auth() -> Response | None:
         401,
         {"WWW-Authenticate": 'Basic realm="Fraud-Spike Review Queue"'},
     )
+
+def _serialize_item(item: dict) -> dict:
+    """Shape a queue row for the API, with unscored items marked as such.
+
+    Two derived fields, both about the same thing:
+
+    - `scored` is False for a live-ingested item. The client keys its whole
+      presentation off this flag, so an unscored item cannot pick up a scored
+      item's rendering by accident.
+    - `model_score` becomes JSON null for those items rather than the storage
+      sentinel. review_queue.model_score is REAL NOT NULL, so the row has to
+      hold *some* number; what a reviewer must never see is a number that looks
+      like a risk score when no risk score exists. Null is the honest wire
+      value, and it is also unusable as one — arithmetic on it fails loudly
+      instead of silently averaging a fake score into a metric.
+    """
+    out = dict(item)
+    scored = out.get("flagged_type") != LIVE_DEMO_FLAGGED_TYPE
+    out["scored"] = scored
+    if not scored:
+        out["model_score"] = None
+    return out
+
 
 @app.route("/")
 def index():
@@ -176,7 +224,7 @@ def index():
 @app.route("/api/pending")
 def api_pending():
     queue = ReviewQueue(db_path=DB_PATH)
-    items = queue.list_pending()
+    items = [_serialize_item(item) for item in queue.list_pending()]
     return jsonify(items)
 
 
@@ -196,13 +244,15 @@ def api_audit():
     entries: list[dict] = []
     for status in sorted(ALLOWED_REVIEWER_ACTIONS):
         for item in queue.list_pending(status=status):
+            shaped = _serialize_item(item)
             for record in queue.get_audit_log(item["id"]):
                 entries.append({
                     "audit_id": record["id"],
                     "queue_id": item["id"],
                     "entity_id": item["entity_id"],
-                    "flagged_type": item["flagged_type"],
-                    "model_score": item["model_score"],
+                    "flagged_type": shaped["flagged_type"],
+                    "scored": shaped["scored"],
+                    "model_score": shaped["model_score"],
                     "reviewer_action": record["reviewer_action"],
                     "note": record["note"],
                     "timestamp": record["timestamp"],
@@ -253,6 +303,144 @@ def api_resolve(queue_id: int):
     queue = ReviewQueue(db_path=DB_PATH)
     queue.resolve(queue_id, reviewer_action=action, note=note)
     return jsonify({"status": "success", "queue_id": queue_id, "action": action})
+
+
+# ---------------------------------------------------------------------------
+# Live test-mode ingestion (proof-of-concept).
+#
+# Two routes, and deliberately no more: one creates a single test-mode order,
+# one receives the signed webhook that the resulting payment produces. Neither
+# can capture, refund, cancel, or pay out — the enforced boundary is documented
+# in src/ingest/razorpay_live.py. Items ingested here are never scored by the
+# model; see that module for why a score would be dishonest rather than merely
+# unavailable.
+# ---------------------------------------------------------------------------
+
+
+@app.route("/api/live/trigger", methods=["POST"])
+def api_live_trigger():
+    """Create ONE Razorpay test-mode order so a real payment can be ingested.
+
+    An order is an intent to be paid, not a movement of funds, and it is the
+    only outbound payment-rail call this application is capable of making.
+
+    The response carries the order id and the *publishable* key id. That key id
+    is designed to be public — Razorpay's hosted checkout needs it in the
+    browser — and it only ever leaves the server behind whatever auth this
+    instance is running. The key secret and the webhook signing secret never do.
+    """
+    if READ_ONLY:
+        return jsonify({
+            "status": "read_only",
+            "error": "This instance is running read-only; live ingestion is disabled.",
+        }), 403
+
+    if not _csrf_token_is_valid():
+        return jsonify({
+            "status": "error",
+            "error": "Missing or invalid CSRF token.",
+        }), 403
+
+    try:
+        # Reads the environment and enforces the test-mode prefix before any
+        # socket is opened, so a live-mode key cannot produce even one call.
+        credentials = load_credentials(require_webhook_secret=False)
+        order = create_test_order()
+    except RazorpayConfigError as exc:
+        # Operator configuration fault, not a client fault: credentials absent,
+        # or a live-mode key refused. 503 rather than 500 — the capability is
+        # unavailable on this instance, the application is fine.
+        app.logger.warning("Live ingestion unavailable: %s", exc)
+        return jsonify({"status": "unavailable", "error": str(exc)}), 503
+    except LiveIngestionError as exc:
+        app.logger.warning("Razorpay order creation failed: %s", exc)
+        return jsonify({"status": "error", "error": str(exc)}), 502
+
+    return jsonify({
+        "status": "success",
+        "order_id": order.get("id"),
+        "amount": order.get("amount"),
+        "currency": order.get("currency"),
+        "key_id": credentials.key_id,
+    })
+
+
+@app.route(WEBHOOK_PATH, methods=["POST"])
+def api_razorpay_webhook():
+    """Ingest one signature-verified test-mode payment as an UNSCORED item.
+
+    The order of operations is itself the security property: verify the HMAC
+    over the raw bytes, then claim the event id, and only then parse. Nothing
+    about an unverified payload is parsed, enqueued, or written to a log.
+    """
+    # Raw bytes, never request.get_json(): the signature covers the body exactly
+    # as sent, and a parse-and-re-serialise round trip would invalidate it.
+    raw_body = request.get_data()
+
+    secret = os.environ.get("RAZORPAY_WEBHOOK_SECRET", "").strip()
+    if not secret:
+        app.logger.warning(
+            "Razorpay webhook rejected: RAZORPAY_WEBHOOK_SECRET is not set on this instance."
+        )
+        return jsonify({
+            "status": "unavailable",
+            "error": "Webhook signing secret is not configured.",
+        }), 503
+
+    if not verify_webhook_signature(raw_body, request.headers.get(SIGNATURE_HEADER), secret):
+        # Recorded without the body and without the presented signature. An
+        # unverified request is attacker-controlled input; the only fact worth
+        # keeping is that one arrived and was refused.
+        app.logger.warning(
+            "Razorpay webhook rejected: signature verification failed (%d byte body).",
+            len(raw_body),
+        )
+        return jsonify({
+            "status": "error",
+            "error": "Signature verification failed.",
+        }), 400
+
+    if READ_ONLY:
+        return jsonify({
+            "status": "read_only",
+            "error": "This instance is running read-only; live ingestion is disabled.",
+        }), 503
+
+    try:
+        payload = json.loads(raw_body.decode("utf-8"))
+    except (UnicodeDecodeError, ValueError):
+        payload = None
+    if not isinstance(payload, dict):
+        return jsonify({
+            "status": "error",
+            "error": "Request body must be a JSON object.",
+        }), 400
+
+    event_id = extract_event_id(request.headers, payload)
+    if not event_id:
+        return jsonify({
+            "status": "error",
+            "error": "Webhook carried no event id and no payment id; refusing to ingest.",
+        }), 400
+
+    if not record_event_id(DB_PATH, event_id):
+        # Razorpay retries any delivery it did not get a 2xx for, so a replay
+        # must answer 200 — a 4xx here would make it retry the duplicate
+        # indefinitely. The point is that nothing is enqueued a second time.
+        return jsonify({"status": "duplicate_ignored", "event_id": event_id}), 200
+
+    brief = build_live_demo_brief(payload)
+    queue_id = ReviewQueue(db_path=DB_PATH).enqueue(brief)
+    return jsonify({
+        "status": "success",
+        "queue_id": queue_id,
+        "event_id": event_id,
+        "flagged_type": brief.flagged_type,
+        # Stated on the wire, not only inferred from flagged_type, so a consumer
+        # cannot mistake this item for a scored one.
+        "scored": False,
+        "model_score": None,
+    })
 
 
 @app.route("/health")

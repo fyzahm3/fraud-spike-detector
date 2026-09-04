@@ -86,6 +86,23 @@
                 <h2>Briefs awaiting a decision</h2>
                 <p>Ordered by model risk score, highest first. Every factor shown is a model input, not a conclusion.</p>
             </div>
+
+            <div class="live-trigger">
+                <div class="live-trigger__action">
+                    <button class="btn btn--live" type="button" id="btn-live-trigger">
+                        Trigger live transaction
+                    </button>
+                    <p class="live-trigger__status" id="live-trigger-status" role="status" aria-live="polite"></p>
+                </div>
+                <p class="live-trigger__note">
+                    <strong>Proof-of-concept.</strong> Creates one &#8377;1 order against Razorpay in
+                    <strong>test mode</strong> and opens their hosted checkout. The signed webhook that
+                    the payment produces is verified and enqueued below as an
+                    <strong>unscored</strong> item. The fraud model does not score it: it was trained on
+                    the IEEE-CIS feature space, which a payment webhook does not contain, so any number
+                    shown would describe placeholder values rather than the payment.
+                </p>
+            </div>
             <div id="pending-container" aria-live="polite" aria-busy="true"></div>
         </section>
 

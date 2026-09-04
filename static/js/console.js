@@ -23,6 +23,17 @@
 
     var MAX_NOTE_LENGTH = 2000;
 
+    /* An item ingested live from the payment rail. The model never scored it,
+       because a webhook payload does not carry the feature space the model was
+       trained on. Everything below keys off this value rather than off a
+       missing score, so an unscored item can never fall through to a scored
+       item's rendering by accident. */
+    var UNSCORED_TYPE = "live_demo_unscored";
+
+    function isScored(item) {
+        return item.flagged_type !== UNSCORED_TYPE;
+    }
+
     var state = { pending: [], audit: [], view: "pending" };
 
     /* --- tiny DOM helpers ------------------------------------------------ */
@@ -106,6 +117,15 @@
     }
 
     function typeTag(flaggedType) {
+        /* Three distinct labels, distinguished by wording and not only by
+           colour: a viewer who cannot see colour must still be unable to
+           mistake a live unscored item for a scored one. */
+        if (flaggedType === UNSCORED_TYPE) {
+            return el("span", {
+                className: "tag tag--unscored",
+                text: "Live ingestion · not scored"
+            });
+        }
         var isSpike = flaggedType === "spike";
         return el("span", {
             className: "tag " + (isSpike ? "tag--spike" : "tag--transaction"),
@@ -117,6 +137,18 @@
         var value = typeof factor.value === "number"
             ? factor.value.toFixed(2)
             : factor.value;
+        /* A live-ingested item's fields are observations, not model inputs,
+           and must not read as risk evidence in either direction. */
+        if (factor.direction === "not_a_model_input") {
+            return el("tr", {}, [
+                el("td", { className: "factors__feature", text: factor.feature }),
+                el("td", { className: "factors__value", text: value }),
+                el("td", {
+                    className: "factors__direction factors__direction--neutral",
+                    text: "Not a model input"
+                })
+            ]);
+        }
         var increases = factor.direction === "increases_risk";
         return el("tr", {}, [
             el("td", { className: "factors__feature", text: factor.feature }),
@@ -129,31 +161,57 @@
         ]);
     }
 
-    function factorsTable(factors) {
+    function factorsTable(factors, scored) {
+        /* The column and caption wording changes too, not just the cells: for an
+           unscored item these rows are payload fields, and calling them
+           contributing factors would be the same false claim in another place. */
         var head = el("thead", {}, [
             el("tr", {}, [
-                el("th", { text: "Model feature", attrs: { scope: "col" } }),
+                el("th", {
+                    text: scored ? "Model feature" : "Payload field",
+                    attrs: { scope: "col" }
+                }),
                 el("th", { text: "Value", attrs: { scope: "col" } }),
-                el("th", { text: "Direction", attrs: { scope: "col" } })
+                el("th", {
+                    text: scored ? "Direction" : "Role",
+                    attrs: { scope: "col" }
+                })
             ])
         ]);
         var body = el("tbody", {}, (factors || []).map(factorRow));
         var table = el("table", { className: "factors" }, [
-            el("caption", { text: "Top contributing factors" }), head, body
+            el("caption", {
+                text: scored
+                    ? "Top contributing factors"
+                    : "Observed payload fields \u2014 none is a model feature"
+            }),
+            head,
+            body
         ]);
         return el("div", { className: "factors-wrap" }, [table]);
     }
 
     function actionBar(item) {
         var recommendation = el("p", { className: "brief__recommendation" });
-        recommendation.appendChild(text("Model recommendation "));
-        recommendation.appendChild(
-            el("span", { className: "mono", text: item.recommended_action })
-        );
-        recommendation.appendChild(text(" · estimated cost if dismissed in error "));
-        recommendation.appendChild(
-            el("span", { className: "mono num", text: money(item.estimated_fp_cost) })
-        );
+        if (isScored(item)) {
+            recommendation.appendChild(text("Model recommendation "));
+            recommendation.appendChild(
+                el("span", { className: "mono", text: item.recommended_action })
+            );
+            recommendation.appendChild(text(" \u00b7 estimated cost if dismissed in error "));
+            recommendation.appendChild(
+                el("span", { className: "mono num", text: money(item.estimated_fp_cost) })
+            );
+        } else {
+            /* No "model recommendation" line here. The model made no
+               recommendation about this item, and a $0 cost estimate would be a
+               number standing in for a judgement that was never made. */
+            recommendation.appendChild(text(
+                "The model made no recommendation for this item and estimated no cost. " +
+                "It is queued so a human can see the ingested payment; any decision " +
+                "recorded is entirely the reviewer's own."
+            ));
+        }
 
         var noteId = "note-" + item.id;
         var input = el("input", {
@@ -190,28 +248,48 @@
     }
 
     function briefBlock(item) {
+        var scored = isScored(item);
+
+        /* The confidence tag is suppressed for an unscored item: there is no
+           scored judgement to be more or less confident about, so the word
+           should not appear anywhere near it. */
+        var identity = [
+            typeTag(item.flagged_type),
+            el("span", { className: "brief__entity mono", text: "Entity " + item.entity_id })
+        ];
+        if (scored) { identity.push(confidenceTag(item.confidence)); }
+
+        /* Where a scored item shows four decimal places, this shows words. The
+           server already sends model_score as null for these, so there is no
+           number here to accidentally format. */
+        var scoreblock = scored
+            ? el("div", { className: "brief__scoreblock" }, [
+                  el("span", { className: "brief__score num", text: item.model_score.toFixed(4) }),
+                  el("span", { className: "brief__score-label", text: "Risk score" })
+              ])
+            : el("div", { className: "brief__scoreblock brief__scoreblock--unscored" }, [
+                  el("span", { className: "brief__score brief__score--none", text: "Not scored" }),
+                  el("span", { className: "brief__score-label", text: "No model score exists" })
+              ]);
+
         var head = el("div", { className: "brief__head" }, [
-            el("div", { className: "brief__identity" }, [
-                typeTag(item.flagged_type),
-                el("span", { className: "brief__entity mono", text: "Entity " + item.entity_id }),
-                confidenceTag(item.confidence)
-            ]),
-            el("div", { className: "brief__scoreblock" }, [
-                el("span", { className: "brief__score num", text: item.model_score.toFixed(4) }),
-                el("span", { className: "brief__score-label", text: "Risk score" })
-            ])
+            el("div", { className: "brief__identity" }, identity),
+            scoreblock
         ]);
 
         var summary = el("p", { className: "brief__summary" }, [
-            el("span", { className: "brief__summary-label", text: "Risk brief" })
+            el("span", {
+                className: "brief__summary-label",
+                text: scored ? "Risk brief" : "Ingestion note"
+            })
         ]);
         summary.appendChild(text(item.summary_text));
 
         return el("article", {
-            className: "brief",
+            className: "brief" + (scored ? "" : " brief--unscored"),
             id: "item-" + item.id,
             attrs: { "aria-label": "Brief " + item.id }
-        }, [head, summary, factorsTable(item.top_factors), actionBar(item)]);
+        }, [head, summary, factorsTable(item.top_factors, scored), actionBar(item)]);
     }
 
     /* --- audit trail ----------------------------------------------------- */
@@ -229,7 +307,12 @@
                 text(" "),
                 typeTag(entry.flagged_type)
             ]),
-            el("td", { className: "audit__score num", text: entry.model_score.toFixed(4) }),
+            entry.scored === false || entry.model_score === null
+                ? el("td", {
+                      className: "audit__score audit__score--none",
+                      text: "Not scored"
+                  })
+                : el("td", { className: "audit__score num", text: entry.model_score.toFixed(4) }),
             el("td", {}, [
                 el("span", {
                     className: "decision decision--" + entry.reviewer_action,
@@ -271,21 +354,44 @@
             return;
         }
 
-        var total = items.reduce(function (sum, item) { return sum + item.model_score; }, 0);
-        var cost = items.reduce(function (sum, item) { return sum + item.estimated_fp_cost; }, 0);
-        var lowest = items.reduce(function (min, item) {
-            return Math.min(min, item.model_score);
-        }, Infinity);
-        var spikes = items.filter(function (item) {
+        /* Every aggregate is computed over scored items only. An unscored item
+           has no score to average and no cost estimate to add, and letting one
+           into these sums would put a fabricated number on the page by the back
+           door — the same failure as printing a fake score on the card. */
+        var scoredItems = items.filter(isScored);
+        var unscored = items.length - scoredItems.length;
+
+        var cost = scoredItems.reduce(function (sum, item) {
+            return sum + item.estimated_fp_cost;
+        }, 0);
+        var spikes = scoredItems.filter(function (item) {
             return item.flagged_type === "spike";
         }).length;
 
-        byId("metric-score").textContent = (total / items.length).toFixed(4);
         byId("metric-cost").textContent = money(cost);
-        byId("metric-score-note").textContent = "Lowest in queue " + lowest.toFixed(4);
-        byId("metric-pending-note").textContent =
+
+        if (scoredItems.length === 0) {
+            byId("metric-score").textContent = "\u2014";
+            byId("metric-score-note").textContent = "No scored items in queue";
+        } else {
+            var total = scoredItems.reduce(function (sum, item) {
+                return sum + item.model_score;
+            }, 0);
+            var lowest = scoredItems.reduce(function (min, item) {
+                return Math.min(min, item.model_score);
+            }, Infinity);
+            byId("metric-score").textContent = (total / scoredItems.length).toFixed(4);
+            byId("metric-score-note").textContent = "Lowest in queue " + lowest.toFixed(4) +
+                (unscored ? " \u00b7 " + unscored + " unscored excluded" : "");
+        }
+
+        var composition =
             spikes + (spikes === 1 ? " spike event" : " spike events") + ", " +
-            (items.length - spikes) + " single";
+            (scoredItems.length - spikes) + " single";
+        if (unscored) {
+            composition += ", " + unscored + " live unscored";
+        }
+        byId("metric-pending-note").textContent = composition;
     }
 
     function renderPending() {
@@ -313,6 +419,95 @@
             return;
         }
         fill(container, [auditTable(state.audit)]);
+    }
+
+    /* --- live ingestion (proof-of-concept) ------------------------------- */
+
+    var CHECKOUT_SCRIPT = "https://checkout.razorpay.com/v1/checkout.js";
+    var checkoutLoading = null;
+
+    function liveStatus(message, isError) {
+        var node = byId("live-trigger-status");
+        if (!node) { return; }
+        node.textContent = message;
+        node.className = "live-trigger__status" +
+            (isError ? " live-trigger__status--error" : "");
+    }
+
+    /* Loaded on demand rather than in the page head: this third-party script is
+       only needed by whoever clicks the button, so an ordinary reviewer's
+       session never fetches it. */
+    function loadCheckout() {
+        if (window.Razorpay) { return Promise.resolve(); }
+        if (checkoutLoading) { return checkoutLoading; }
+        checkoutLoading = new Promise(function (resolve, reject) {
+            var script = document.createElement("script");
+            script.src = CHECKOUT_SCRIPT;
+            script.onload = function () { resolve(); };
+            script.onerror = function () {
+                checkoutLoading = null;
+                reject(new Error("Could not load Razorpay's checkout script."));
+            };
+            document.head.appendChild(script);
+        });
+        return checkoutLoading;
+    }
+
+    function openCheckout(order) {
+        return loadCheckout().then(function () {
+            var checkout = new window.Razorpay({
+                key: order.key_id,
+                order_id: order.order_id,
+                amount: order.amount,
+                currency: order.currency,
+                name: "Fraud-Spike Review Queue",
+                description: "Test-mode live ingestion proof-of-concept",
+                handler: function () {
+                    /* Razorpay's webhook is the source of truth, not this
+                       callback: the queue item is created server-side only
+                       after an HMAC-verified delivery. Reloading here just
+                       picks it up once it lands. */
+                    liveStatus(
+                        "Payment submitted. Waiting for the signed webhook \u2014 the item " +
+                        "appears below once its signature verifies.", false
+                    );
+                    window.setTimeout(load, 2500);
+                },
+                modal: {
+                    ondismiss: function () {
+                        liveStatus("Checkout closed. No payment was made.", false);
+                    }
+                }
+            });
+            checkout.open();
+            liveStatus("Test-mode order " + order.order_id + " created. Complete it with a test card.", false);
+        });
+    }
+
+    function triggerLiveTransaction() {
+        var button = byId("btn-live-trigger");
+        if (button) { button.disabled = true; }
+        liveStatus("Creating a test-mode order\u2026", false);
+
+        fetch("/api/live/trigger", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "X-CSRF-Token": csrfToken()
+            },
+            body: "{}"
+        }).then(function (res) {
+            return res.json().catch(function () { return {}; }).then(function (body) {
+                if (!res.ok) {
+                    throw new Error(body.error || "The server returned HTTP " + res.status + ".");
+                }
+                return openCheckout(body);
+            });
+        }).catch(function (error) {
+            liveStatus(error.message, true);
+        }).then(function () {
+            if (button) { button.disabled = false; }
+        });
     }
 
     /* --- data ------------------------------------------------------------ */
@@ -414,6 +609,11 @@
     Array.prototype.forEach.call(document.querySelectorAll(".view-tab"), function (tab) {
         tab.addEventListener("click", function () { showView(tab.dataset.view); });
     });
+
+    var liveButton = byId("btn-live-trigger");
+    if (liveButton) {
+        liveButton.addEventListener("click", triggerLiveTransaction);
+    }
 
     showView("pending");
     load();

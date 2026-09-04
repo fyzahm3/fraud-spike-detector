@@ -95,6 +95,24 @@ The primary dataset used in this project is IEEE-CIS Fraud Detection, which cons
 
 ---
 
+## Live Ingestion Proof-of-Concept
+
+A single real payment flows from Razorpay into the review queue. It is deliberately **not scored**, and that is the point of the section.
+
+**What was built.** Three pieces, and nothing else: a *Trigger live transaction* button on the dashboard, a backend route that creates one ₹1 order against Razorpay's **test mode** (`POST /api/live/trigger`), and a webhook endpoint that receives the resulting event (`POST /api/webhook/razorpay`), verifies its HMAC-SHA256 signature over the raw request body against `RAZORPAY_WEBHOOK_SECRET`, and enqueues the payment for human review. `src/ingest/razorpay_live.py` holds the whole feature. Its only outbound call is `POST /v1/orders`; there is no code path in the repository that can refund, capture, cancel, pay out, or subscribe, and `tests/test_live_ingestion.py::test_ingest_package_cannot_move_money` asserts it. A key id that does not begin with `rzp_test_` is refused during credential loading, before any socket is opened — this system must not be *capable* of reaching a live payment environment, not merely configured away from one.
+
+**Why it is not scored by the trained model.** The model was trained on the IEEE-CIS feature space: roughly 430 engineered columns, including the masked `V1`–`V339` block and the causal co-occurrence features that `src/features/graph_features.py` derives from an entity's own transaction history. A Razorpay webhook payload carries an amount, a currency, a method, an order id, and a timestamp. Those two spaces do not overlap.
+
+Defaulting the ~430 absent features to zeros and calling `predict()` *would* return a number. That number would be a property of the padding, not of the payment. This project has already shipped one metric that was an artifact of its data rather than its model — the PaySim label-leakage incident recorded under *Known Limitations* — found it, and deleted it. Producing a second one deliberately, so a demo looks more complete, is not a trade this repository makes.
+
+So the item is stored with `flagged_type="live_demo_unscored"`, distinct from `"transaction"` and `"spike"`, and the API serves `model_score: null` alongside an explicit `scored: false`. The dashboard renders it on its own branch: a dashed **"Live ingestion · not scored"** badge, the words *"Not scored / No model score exists"* where a scored brief shows four decimal places, an *Ingestion note* rather than a *Risk brief*, and a table headed *"Observed payload fields — none is a model feature"* whose every row reads *"Not a model input"* instead of *Increases/Reduces risk*. The distinction is carried by wording and border style, not by colour alone, so it survives greyscale and colour-blindness. The confidence tag and the model-recommendation line are suppressed entirely — there is no scored judgement to be confident about. The queue's headline *Mean risk score* and *Est. false-positive cost* tiles exclude these items, so an unscored row cannot smuggle a number into an aggregate either. The brief text is a fixed constant, never LLM-generated: a model asked to explain the absence of a score may improvise around it, which is precisely the failure being avoided.
+
+**What real-time scoring would actually require.** Deriving the model's feature space from live data — which this proof-of-concept does not attempt. Concretely: a durable per-entity store of prior payments so the 24h/7d co-occurrence and decayed-neighbour-fraud-mass features have history to read; an equivalent of the IEEE-CIS identity join (device, browser, and address signals) available at authorization time; and a replacement for the masked `V1`–`V339` block, which is proprietary engineered signal with no public definition and therefore cannot be reconstructed at all — a production system would train on its own feature space rather than port this one. Until that exists, ingestion and scoring are separate capabilities here, and the queue says so on every affected row.
+
+**Configuration.** `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, and `RAZORPAY_WEBHOOK_SECRET` are read from the environment only; placeholders are in `.env.example` and no value is committed or logged. Left unset, the dashboard button reports the capability as unconfigured and does nothing — the rest of the console is unaffected.
+
+---
+
 ## Defense-Only Policy
 
 This system is strictly **defense-only by design**:
@@ -125,11 +143,11 @@ cp .env.example .env
 # Edit .env and insert your GEMINI_API_KEY
 ```
 
-### 2. Run Test Suite (91/91 Passing)
+### 2. Run Test Suite (104/104 Passing)
 ```bash
 pytest
 ```
-*Executes unit tests, chronological time-split leakage checks (`test_features_match_brute_force_past_only`), half-open boundary assertions, LLM schema tests, PaySim split-logic tests, review-queue concurrency and index tests, UI endpoints, dashboard security tests (XSS payload handling, required-action validation, CSRF double-submit, note bounds), deployment surface tests (health check, basic auth, read-only gating, demo-snapshot honesty), and end-to-end integration tests in ~31s.*
+*Executes unit tests, chronological time-split leakage checks (`test_features_match_brute_force_past_only`), half-open boundary assertions, LLM schema tests, PaySim split-logic tests, review-queue concurrency and index tests, UI endpoints, dashboard security tests (XSS payload handling, required-action validation, CSRF double-submit, note bounds), deployment surface tests (health check, basic auth, read-only gating, demo-snapshot honesty), live-ingestion tests (webhook signature rejection, replay rejection, test-mode key enforcement, and the assertion that an ingested payment carries no fabricated score), and end-to-end integration tests in ~29s.*
 
 ### 3. Execute End-to-End Pipeline & Dashboard
 ```bash
@@ -281,6 +299,8 @@ Railway works the same way via the [`Procfile`](Procfile); set the same environm
 | `DEMO_MODE` | off | Serve `data/demo_review_queue.db` instead of `results/review_queue.db` |
 | `REVIEW_DB_PATH` | unset | Explicit database path; overrides `DEMO_MODE` |
 | `DEMO_USER` / `DEMO_PASSWORD` | unset | Basic auth on every route except `/health`. **Auth is enabled only when both are set** — absent them the app runs open, which is what keeps local development and the test suite unchanged |
+| `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` | unset | Test-mode Razorpay keys for live ingestion. A key id that is not `rzp_test_`-prefixed is refused before any network call |
+| `RAZORPAY_WEBHOOK_SECRET` | unset | HMAC-SHA256 signing secret for `POST /api/webhook/razorpay` |
 | `READ_ONLY` | off | `POST /api/resolve` returns 403. Kept separate from `DEMO_MODE` so the demo's resolve buttons work on camera |
 
 `GET /health` is unauthenticated by design — the platform's readiness probe cannot send credentials, and a 401 there would fail the deploy. It returns 200 with the queue state, or **503** if the database is unreachable, so a boot with a broken snapshot never takes traffic.
@@ -333,8 +353,9 @@ The web dependency set was additionally **dry-run installed into a clean virtual
 │   ├── features/                 # Preprocessing & 12 causal graph features
 │   ├── models/                   # XGBoost training, thresholding & cost metrics
 │   ├── spike/                    # Phase 3 SpikeScorer (1h/24h) & SpikeEvent detection
-│   └── explain/                  # Phase 4 RiskBrief generator & SQLite ReviewQueue
-├── tests/                        # 91 unit, leakage, concurrency, deployment, security, UI, and integration tests
+│   ├── explain/                  # Phase 4 RiskBrief generator & SQLite ReviewQueue
+│   └── ingest/                   # Razorpay test-mode live ingestion (unscored, ingest-only)
+├── tests/                        # 104 unit, leakage, concurrency, deployment, security, UI, live-ingestion, and integration tests
 └── results/                      # Committed metrics, manifests, and run summaries
 ```
 

@@ -882,3 +882,84 @@ body {
         transition-duration: 0.01ms !important;
     }
 }
+
+/* --------------------------------------------------------------------------
+   Live ingestion (proof-of-concept)
+
+   Everything here exists to keep one distinction legible: an item ingested from
+   the live payment rail carries no model score, and must never be mistakable
+   for one that does. The separation is carried by wording and by a dashed
+   border — not by hue alone — so it survives greyscale, colour-blindness, and a
+   printed screenshot in a pitch deck.
+   -------------------------------------------------------------------------- */
+
+.live-trigger {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s-4) var(--s-6);
+    align-items: flex-start;
+    justify-content: space-between;
+    margin-bottom: var(--s-6);
+    padding: var(--s-5);
+    border: var(--hairline) dashed var(--rule-strong);
+    border-radius: var(--radius);
+    background: var(--surface);
+}
+
+.live-trigger__action { flex: 0 0 auto; }
+
+.live-trigger__note {
+    flex: 1 1 22rem;
+    margin: 0;
+    color: var(--ink-muted);
+    font-size: 12px;
+    line-height: 1.55;
+}
+
+.live-trigger__status {
+    margin: var(--s-3) 0 0;
+    max-width: 26rem;
+    color: var(--ink-muted);
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.live-trigger__status:empty { display: none; }
+
+.live-trigger__status--error { color: var(--crimson-700); }
+
+.btn--live { font-weight: 600; }
+
+/* The dashed edge repeats the card's own signal: this row is structurally
+   different from the solid-bordered scored briefs around it. */
+.brief--unscored { border-style: dashed; }
+
+.tag--unscored {
+    background: var(--surface-sunk);
+    border-style: dashed;
+    border-color: var(--ash-800);
+    color: var(--ink);
+}
+
+/* Words, not a number, and deliberately not in the numeric face used by real
+   scores — nothing in this block should read as a measurement. */
+.brief__score--none {
+    display: block;
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: 0;
+    color: var(--ink-muted);
+    text-transform: none;
+}
+
+.audit__score--none {
+    color: var(--ink-muted);
+    font-size: 12px;
+    font-style: italic;
+}
+
+.factors__direction--neutral {
+    color: var(--ink-muted);
+    font-style: italic;
+}
+
