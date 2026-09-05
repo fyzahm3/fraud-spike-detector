@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/banner.svg" alt="Fraud Spike Detector — catch the fraud, count what it costs" width="100%">
+  <img src="docs/banner.svg" alt="Fraud Spike Detector — catch the fraud,     count what it costs" width="100%">
 </p>
 
 <p align="center">
