@@ -10,9 +10,9 @@
     "use strict";
 
     var DECISIONS = [
-        ["resolved_false_positive", "Dismiss as false positive", "btn--dismiss"],
-        ["escalated", "Escalate", "btn--escalate"],
-        ["resolved_true_positive", "Confirm fraud", "btn--primary"]
+        ["resolved_false_positive", "Dismiss as false positive", "btn-quiet"],
+        ["escalated", "Escalate", "btn-quiet"],
+        ["resolved_true_positive", "Confirm fraud", "btn-primary"]
     ];
 
     var DECISION_LABELS = {
@@ -78,14 +78,14 @@
     /* --- status panels --------------------------------------------------- */
 
     function loadingPanel(message) {
-        return el("div", { className: "panel panel--loading" }, [
+        return el("div", { className: "state state-loading" }, [
             el("span", { className: "spinner", attrs: { "aria-hidden": "true" } }),
             el("p", { text: message })
         ]);
     }
 
     function emptyPanel(heading, message) {
-        return el("div", { className: "panel" }, [
+        return el("div", { className: "state" }, [
             el("h3", { text: heading }),
             el("p", { text: message })
         ]);
@@ -94,7 +94,7 @@
     function errorPanel(heading, message, detail, retry) {
         var nodes = [el("h3", { text: heading }), el("p", { text: message })];
         if (detail) {
-            nodes.push(el("p", { className: "panel__detail", text: detail }));
+            nodes.push(el("p", { className: "state-detail", text: detail }));
         }
         var button = el("button", {
             className: "btn", text: "Try again", attrs: { type: "button" }
@@ -102,7 +102,7 @@
         button.addEventListener("click", retry);
         nodes.push(button);
         return el("div", {
-            className: "panel panel--error", attrs: { role: "alert" }
+            className: "state state-error", attrs: { role: "alert" }
         }, nodes);
     }
 
@@ -111,10 +111,7 @@
     function confidenceTag(confidence) {
         var known = { high: 1, medium: 1, low: 1 };
         var suffix = known[confidence] ? confidence : "low";
-        return el("span", {
-            className: "tag tag--confidence-" + suffix,
-            text: confidence + " confidence"
-        });
+        return el("span", { className: "tag", text: confidence + " confidence" });
     }
 
     function typeTag(flaggedType) {
@@ -123,13 +120,13 @@
            mistake a live unscored item for a scored one. */
         if (flaggedType === UNSCORED_TYPE) {
             return el("span", {
-                className: "tag tag--unscored",
+                className: "tag tag-unscored",
                 text: "Live ingestion · not scored"
             });
         }
         var isSpike = flaggedType === "spike";
         return el("span", {
-            className: "tag " + (isSpike ? "tag--spike" : "tag--transaction"),
+            className: "tag " + (isSpike ? "tag-accent" : ""),
             text: isSpike ? "Spike event" : "Transaction"
         });
     }
@@ -142,21 +139,21 @@
            and must not read as risk evidence in either direction. */
         if (factor.direction === "not_a_model_input") {
             return el("tr", {}, [
-                el("td", { className: "factors__feature", text: factor.feature }),
-                el("td", { className: "factors__value", text: value }),
+                el("td", { className: "factors-feature", text: factor.feature }),
+                el("td", { className: "factors-value", text: value }),
                 el("td", {
-                    className: "factors__direction factors__direction--neutral",
+                    className: "factors-neutral",
                     text: "Not a model input"
                 })
             ]);
         }
         var increases = factor.direction === "increases_risk";
         return el("tr", {}, [
-            el("td", { className: "factors__feature", text: factor.feature }),
-            el("td", { className: "factors__value", text: value }),
+            el("td", { className: "factors-feature", text: factor.feature }),
+            el("td", { className: "factors-value", text: value }),
             el("td", {
-                className: "factors__direction " +
-                    (increases ? "factors__direction--up" : "factors__direction--down"),
+                className: "" +
+                    (increases ? "factors-up" : "factors-down"),
                 text: increases ? "Increases risk" : "Reduces risk"
             })
         ]);
@@ -193,7 +190,7 @@
     }
 
     function actionBar(item) {
-        var recommendation = el("p", { className: "brief__recommendation" });
+        var recommendation = el("p", { className: "brief-rec" });
         if (isScored(item)) {
             recommendation.appendChild(text("Model recommendation "));
             recommendation.appendChild(
@@ -241,7 +238,7 @@
             return button;
         });
 
-        return el("footer", { className: "brief__actions" }, [
+        return el("footer", { className: "brief-ft" }, [
             recommendation,
             noteField,
             el("div", { className: "decisions" }, buttons)
@@ -256,7 +253,7 @@
            should not appear anywhere near it. */
         var identity = [
             typeTag(item.flagged_type),
-            el("span", { className: "brief__entity mono", text: "Entity " + item.entity_id })
+            el("span", { className: "brief-entity mono", text: "Entity " + item.entity_id })
         ];
         if (scored) { identity.push(confidenceTag(item.confidence)); }
 
@@ -264,30 +261,30 @@
            server already sends model_score as null for these, so there is no
            number here to accidentally format. */
         var scoreblock = scored
-            ? el("div", { className: "brief__scoreblock" }, [
-                  el("span", { className: "brief__score num", text: item.model_score.toFixed(4) }),
-                  el("span", { className: "brief__score-label", text: "Risk score" })
+            ? el("div", { className: "brief-scoreblock" }, [
+                  el("span", { className: "brief-score num", text: item.model_score.toFixed(4) }),
+                  el("span", { className: "brief-score-label", text: "Risk score" })
               ])
-            : el("div", { className: "brief__scoreblock brief__scoreblock--unscored" }, [
-                  el("span", { className: "brief__score brief__score--none", text: "Not scored" }),
-                  el("span", { className: "brief__score-label", text: "No model score exists" })
+            : el("div", { className: "brief-scoreblock" }, [
+                  el("span", { className: "brief-score-none", text: "Not scored" }),
+                  el("span", { className: "brief-score-label", text: "No model score exists" })
               ]);
 
-        var head = el("div", { className: "brief__head" }, [
-            el("div", { className: "brief__identity" }, identity),
+        var head = el("div", { className: "brief-hd" }, [
+            el("div", { className: "brief-id" }, identity),
             scoreblock
         ]);
 
-        var summary = el("p", { className: "brief__summary" }, [
+        var summary = el("p", { className: "brief-summary" }, [
             el("span", {
-                className: "brief__summary-label",
+                className: "brief-summary-label",
                 text: scored ? "Risk brief" : "Ingestion note"
             })
         ]);
         summary.appendChild(text(item.summary_text));
 
         return el("article", {
-            className: "brief" + (scored ? "" : " brief--unscored"),
+            className: "brief" + (scored ? "" : " brief-unscored"),
             id: "item-" + item.id,
             attrs: { "aria-label": "Brief " + item.id }
         }, [head, summary, factorsTable(item.top_factors, scored), actionBar(item)]);
@@ -298,11 +295,11 @@
     function auditRow(entry) {
         var decision = DECISION_LABELS[entry.reviewer_action] || entry.reviewer_action;
         var note = entry.note
-            ? el("td", { className: "audit__note", text: entry.note })
-            : el("td", { className: "audit__note audit__note--empty", text: "No note recorded" });
+            ? el("td", { className: "audit-note", text: entry.note })
+            : el("td", { className: "audit-note audit-note-empty", text: "No note recorded" });
 
         return el("tr", {}, [
-            el("td", { className: "audit__id", text: "#" + entry.queue_id }),
+            el("td", { className: "audit-id", text: "#" + entry.queue_id }),
             el("td", {}, [
                 el("span", { className: "mono", text: entry.entity_id }),
                 text(" "),
@@ -310,10 +307,10 @@
             ]),
             entry.scored === false || entry.model_score === null
                 ? el("td", {
-                      className: "audit__score audit__score--none",
+                      className: "audit-score audit-score-none",
                       text: "Not scored"
                   })
-                : el("td", { className: "audit__score num", text: entry.model_score.toFixed(4) }),
+                : el("td", { className: "audit-score num", text: entry.model_score.toFixed(4) }),
             el("td", {}, [
                 el("span", {
                     className: "decision decision--" + entry.reviewer_action,
@@ -321,7 +318,7 @@
                 })
             ]),
             note,
-            el("td", { className: "audit__time", text: entry.timestamp })
+            el("td", { className: "audit-time", text: entry.timestamp })
         ]);
     }
 
@@ -431,8 +428,8 @@
         var node = byId("live-trigger-status");
         if (!node) { return; }
         node.textContent = message;
-        node.className = "live-trigger__status" +
-            (isError ? " live-trigger__status--error" : "");
+        node.className = "live-trigger-status" +
+            (isError ? " live-trigger-status-error" : "");
     }
 
     /* Loaded on demand rather than in the page head: this third-party script is
@@ -550,9 +547,9 @@
         }, [
             el("span", { className: "spinner", attrs: { "aria-hidden": "true" } }),
             el("div", {}, [
-                el("p", { className: "waking__title", text: "Waking the server\u2026" }),
+                el("p", { className: "waking-title", text: "Waking the server\u2026" }),
                 el("p", {
-                    className: "waking__note",
+                    className: "waking-note",
                     text: "This instance sleeps after a period of inactivity, and the first " +
                           "request wakes it. It usually takes about 30 seconds. Nothing is wrong."
                 })
@@ -664,7 +661,7 @@
     function resolveItem(queueId, action, note) {
         var card = byId("item-" + queueId);
         if (card) {
-            card.classList.add("brief--resolving");
+            card.classList.add("brief-resolving");
             Array.prototype.forEach.call(card.querySelectorAll("button, input"),
                 function (control) { control.disabled = true; });
         }
@@ -683,10 +680,10 @@
             });
         }).catch(function (error) {
             if (card) {
-                card.classList.remove("brief--resolving");
+                card.classList.remove("brief-resolving");
                 Array.prototype.forEach.call(card.querySelectorAll("button, input"),
                     function (control) { control.disabled = false; });
-                var existing = card.querySelector(".panel--error");
+                var existing = card.querySelector(".state-error");
                 if (existing) { existing.remove(); }
                 card.appendChild(errorPanel(
                     "Decision not recorded",
@@ -756,43 +753,43 @@
     }
 
     function scoreRow(label, value, className) {
-        return el("div", { className: "verdict__row" }, [
-            el("span", { className: "verdict__key", text: label }),
-            el("span", { className: "verdict__val " + (className || ""), text: value })
+        return el("div", { className: "verdict-row" }, [
+            el("span", { className: "verdict-key", text: label }),
+            el("span", { className: "verdict-val " + (className || ""), text: value })
         ]);
     }
 
     function renderScore(result) {
         var correct = result.outcome === "true_positive" || result.outcome === "true_negative";
 
-        var head = el("div", { className: "verdict__head" }, [
+        var head = el("div", { className: "verdict-hd" }, [
             el("span", {
-                className: "tag " + (result.flagged ? "tag--spike" : "tag--transaction"),
+                className: "tag " + (result.flagged ? "tag-accent" : ""),
                 text: result.flagged ? "Flagged for review" : "Not flagged"
             }),
             el("span", {
-                className: "tag " + (correct ? "tag--correct" : "tag--wrong"),
+                className: "tag " + (correct ? "tag-good" : "tag-warn"),
                 text: correct ? "Model was right" : "Model was wrong"
             })
         ]);
 
-        var score = el("div", { className: "verdict__scoreblock" }, [
-            el("span", { className: "verdict__score num", text: result.model_score.toFixed(6) }),
-            el("span", { className: "verdict__score-label", text: "Risk score, computed just now" })
+        var score = el("div", { className: "verdict-scoreblock" }, [
+            el("span", { className: "verdict-score num", text: result.model_score.toFixed(6) }),
+            el("span", { className: "verdict-score-label", text: "Risk score, computed just now" })
         ]);
 
-        var rows = el("div", { className: "verdict__rows" }, [
+        var rows = el("div", { className: "verdict-rows" }, [
             scoreRow("Decision threshold", result.threshold.toFixed(6)),
             scoreRow("Transaction ID", String(result.transaction_id)),
             scoreRow("Amount", money2(result.amount)),
             scoreRow("Ground truth", result.actual_label === 1 ? "Fraud" : "Legitimate"),
             scoreRow("Outcome", OUTCOME_LABELS[result.outcome] || result.outcome,
-                     correct ? "verdict__val--good" : "verdict__val--bad"),
+                     correct ? "verdict-val-good" : "verdict-val-bad"),
             scoreRow("Features fed to the model", String(result.n_features)),
             scoreRow("Model variant", result.variant)
         ]);
 
-        return el("div", { className: "verdict" + (correct ? "" : " verdict--wrong") },
+        return el("div", { className: "verdict" + (correct ? "" : " verdict-wrong") },
                   [head, score, rows]);
     }
 
@@ -860,52 +857,139 @@
 
     /* --- contextual help --------------------------------------------------
 
-       The explanation text is already in the document, rendered and escaped by
-       the server. This only toggles visibility — it neither fetches nor builds
-       any part of the content, which is why there is nothing here that could
-       put untrusted markup on the page.
+       The affordance is a <details> element rendered by the server, so it opens
+       and closes without JavaScript and the explanation is in the document from
+       the first byte. This adds only the two behaviours the element does not
+       give for free: one panel open at a time, and Escape to close. A note that
+       covers the figure it explains is worse than no note.
        --------------------------------------------------------------------- */
 
-    function closeAllHelp(except) {
-        Array.prototype.forEach.call(
-            document.querySelectorAll("[data-help-toggle]"),
-            function (toggle) {
-                if (toggle === except) { return; }
-                var panel = byId(toggle.getAttribute("data-help-toggle"));
-                if (panel) { panel.hidden = true; }
-                toggle.setAttribute("aria-expanded", "false");
-            }
-        );
+    function closeHints(except) {
+        Array.prototype.forEach.call(document.querySelectorAll("details.hint[open]"),
+            function (node) { if (node !== except) { node.open = false; } });
     }
 
     function initHelp() {
-        var toggles = document.querySelectorAll("[data-help-toggle]");
-        if (!toggles.length) { return; }
+        var hints = document.querySelectorAll("details.hint");
+        if (!hints.length) { return; }
 
-        Array.prototype.forEach.call(toggles, function (toggle) {
-            toggle.addEventListener("click", function (event) {
-                event.stopPropagation();
-                var panel = byId(toggle.getAttribute("data-help-toggle"));
-                if (!panel) { return; }
-                var opening = panel.hidden;
-                closeAllHelp(toggle);
-                panel.hidden = !opening;
-                toggle.setAttribute("aria-expanded", opening ? "true" : "false");
+        Array.prototype.forEach.call(hints, function (hint) {
+            hint.addEventListener("toggle", function () {
+                if (hint.open) { closeHints(hint); }
             });
         });
 
-        /* One open at a time, and Escape closes: a note that covers the number
-           it explains is worse than no note. */
-        document.addEventListener("click", function () { closeAllHelp(null); });
         document.addEventListener("keydown", function (event) {
-            if (event.key === "Escape") { closeAllHelp(null); }
+            if (event.key === "Escape") { closeHints(null); }
         });
-        Array.prototype.forEach.call(
-            document.querySelectorAll(".help__panel"),
-            function (panel) {
-                panel.addEventListener("click", function (e) { e.stopPropagation(); });
+
+        document.addEventListener("click", function (event) {
+            if (!event.target.closest || !event.target.closest("details.hint")) {
+                closeHints(null);
             }
-        );
+        });
+    }
+
+    /* --- motion -----------------------------------------------------------
+
+       Two effects, one observer. Sections rise into place as they are reached,
+       and measured bars grow to a width the server rendered into a custom
+       property. Both are one-shot: nothing loops, and nothing keeps moving
+       after the page settles.
+
+       The counters are the part that needs care. A figure on this site is
+       evidence, so the animation interpolates toward the number but the final
+       frame restores the server's exact string, character for character —
+       never a re-formatted approximation of it. Anything with two numbers in
+       it, or a non-numeric value, is left alone rather than parsed loosely.
+       --------------------------------------------------------------------- */
+
+    var COUNT_MS = 900;
+    var COUNTABLE = ".stat-value.num, .kpi-value.num, .shift-fig.num, .bar-val.num";
+    /* One leading number, then a suffix that contains no further digits. */
+    var SINGLE_NUMBER = /^\s*([0-9][0-9,]*(?:\.[0-9]+)?)([^0-9]*)$/;
+
+    function prefersReducedMotion() {
+        return window.matchMedia
+            && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    }
+
+    function countUp(node) {
+        if (node.dataset.counted === "1") { return; }
+        node.dataset.counted = "1";
+
+        var original = node.textContent;
+        var match = SINGLE_NUMBER.exec(original);
+        if (!match) { return; }
+
+        var target = parseFloat(match[1].replace(/,/g, ""));
+        if (!isFinite(target)) { return; }
+
+        var decimals = (match[1].split(".")[1] || "").length;
+        var grouped = match[1].indexOf(",") !== -1;
+        var suffix = match[2];
+        var started = null;
+
+        function frame(now) {
+            if (started === null) { started = now; }
+            var t = Math.min(1, (now - started) / COUNT_MS);
+            /* easeOutCubic: fast to begin, settling rather than stopping. */
+            var eased = 1 - Math.pow(1 - t, 3);
+            if (t < 1) {
+                var value = target * eased;
+                var text = decimals
+                    ? value.toFixed(decimals)
+                    : String(Math.round(value));
+                if (grouped) {
+                    text = Number(text).toLocaleString("en-US",
+                        { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+                }
+                node.textContent = text + suffix;
+                window.requestAnimationFrame(frame);
+            } else {
+                /* The committed string, restored verbatim. */
+                node.textContent = original;
+            }
+        }
+        window.requestAnimationFrame(frame);
+    }
+
+    function initMotion() {
+        var reveals = document.querySelectorAll(".reveal");
+        var bars = document.querySelectorAll(".bar-fill");
+
+        /* Without IntersectionObserver, or with reduced motion requested,
+           everything is placed in its final state immediately. The page must
+           be complete without a single animation having run. */
+        if (!("IntersectionObserver" in window) || prefersReducedMotion()) {
+            Array.prototype.forEach.call(reveals, function (n) { n.classList.add("is-in"); });
+            Array.prototype.forEach.call(bars, function (n) { n.classList.add("is-in"); });
+            return;
+        }
+
+        var observer = new IntersectionObserver(function (entries) {
+            entries.forEach(function (entry) {
+                if (!entry.isIntersecting) { return; }
+                var node = entry.target;
+                node.classList.add("is-in");
+                Array.prototype.forEach.call(node.querySelectorAll(COUNTABLE), countUp);
+                if (node.classList.contains("bar-fill")) { countUp(node); }
+                observer.unobserve(node);
+            });
+        }, { rootMargin: "0px 0px -8% 0px", threshold: 0.12 });
+
+        Array.prototype.forEach.call(reveals, function (n) { observer.observe(n); });
+        Array.prototype.forEach.call(bars, function (n) { observer.observe(n); });
+    }
+
+    function initNavState() {
+        var head = byId("nav-head");
+        if (!head) { return; }
+        var update = function () {
+            head.setAttribute("data-scrolled", window.scrollY > 8 ? "true" : "false");
+        };
+        update();
+        window.addEventListener("scroll", update, { passive: true });
     }
 
     /* --- page setup -------------------------------------------------------
@@ -916,8 +1000,10 @@
        --------------------------------------------------------------------- */
 
     initHelp();
+    initMotion();
+    initNavState();
 
-    Array.prototype.forEach.call(document.querySelectorAll(".view-tab"), function (tab) {
+    Array.prototype.forEach.call(document.querySelectorAll(".tab"), function (tab) {
         tab.addEventListener("click", function () { showView(tab.dataset.view); });
     });
 

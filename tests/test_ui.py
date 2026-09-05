@@ -69,7 +69,8 @@ def test_ui_index_and_pending_api(client):
     for path in ("/", "/metrics", "/demo", "/live"):
         res = c.get(path)
         assert res.status_code == 200, f"{path} did not render"
-        assert b"Fraud-Spike Detector" in res.data, f"{path} lost the site chrome"
+        # The masthead brand, as set by the approved design.
+        assert b"Fraud&nbsp;spike&nbsp;" in res.data, f"{path} lost the site chrome"
         # Persistent navigation: every page links to every other one.
         for link in (b'href="/"', b'href="/metrics"', b'href="/demo"', b'href="/live"'):
             assert link in res.data, f"{path} is missing nav link {link!r}"
@@ -675,7 +676,7 @@ def test_template_and_static_assets_are_extracted_from_app_py():
     assert "render_template_string" not in source
     assert Path("templates/demo.html").is_file()
     assert Path("templates/base.html").is_file()
-    assert Path("static/css/console.css").is_file()
+    assert Path("static/css/site.css").is_file()
     assert Path("static/js/console.js").is_file()
 
 
@@ -697,7 +698,7 @@ def test_interface_carries_no_emoji_and_no_banned_visual_tells():
         ]
         assert not emoji, f"emoji {emoji!r} found in {path}"
 
-    css = sources[Path("static/css/console.css")].lower()
+    css = sources[Path("static/css/site.css")].lower()
     assert "backdrop-filter" not in css, "glassmorphism blur is banned by DESIGN.md"
     assert "linear-gradient" not in css and "radial-gradient" not in css, "no gradients"
     for tailwind_default in ("#ef4444", "#10b981", "#f59e0b", "#0f172a", "#60a5fa", "#a78bfa"):

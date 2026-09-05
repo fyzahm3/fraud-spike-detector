@@ -197,7 +197,7 @@ The interface is plain HTML/CSS/JS served by Flask. No framework, no build step,
 
 ```
 templates/index.html        # server-rendered shell
-static/css/console.css      # design system (tokens, layout, states)
+static/css/site.css         # design system (tokens, layout, motion, states)
 static/js/console.js        # queue rendering, decisions, view switching
 ```
 
@@ -425,7 +425,7 @@ The web dependency set was additionally **dry-run installed into a clean virtual
 ├── run_pipeline.py               # End-to-end integration pipeline & benchmark script
 ├── app.py                        # Flask review dashboard (gunicorn-served in production)
 ├── templates/index.html          # dashboard shell (extracted from app.py)
-├── static/css/console.css        # design system — see DESIGN.md
+├── static/css/site.css           # design system — see DESIGN.md
 ├── static/js/console.js          # queue rendering and decision flow
 ├── PRODUCT.md                    # durable product context (audience, constraints, evidence)
 ├── DESIGN.md                     # visual direction, tokens, and recorded design decisions

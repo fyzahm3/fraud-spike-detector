@@ -1,67 +1,88 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}Fraud-Spike Detector{% endblock %}</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}Fraud spike detector{% endblock %}</title>
     <meta name="csrf-token" content="{{ csrf_token }}">
-    <meta name="description" content="{% block description %}Explainable, human-gated fraud-spike detection for card and digital payment rails.{% endblock %}">
+    <meta name="description" content="{% block description %}Fraud spike detection that reports what a caught unit of fraud costs in disrupted legitimate spending, and hands every decision to a human reviewer.{% endblock %}">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/console.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/site.css') }}">
 </head>
 <body>
     <a class="skip-link" href="#main">Skip to content</a>
 
-    <header class="masthead">
-        <div class="shell masthead__inner">
-            <a class="masthead__identity" href="{{ url_for('index') }}">
-                <span class="masthead__title">Fraud-Spike Detector</span>
-                <span class="masthead__standfirst">Explainable, human-gated escalation</span>
-            </a>
-            <nav class="nav" aria-label="Primary">
-                <a class="nav__link{% if active == 'home' %} nav__link--active{% endif %}"
-                   href="{{ url_for('index') }}"
+    <header class="nav-head" id="nav-head">
+        <nav class="nav" aria-label="Primary">
+            <a class="nav-brand" href="{{ url_for('index') }}">Fraud&nbsp;spike&nbsp;<span>detector</span></a>
+            <div class="nav-links">
+                <a class="nav-link" href="{{ url_for('index') }}"
                    {% if active == 'home' %}aria-current="page"{% endif %}>Overview</a>
-                <a class="nav__link{% if active == 'metrics' %} nav__link--active{% endif %}"
-                   href="{{ url_for('metrics_page') }}"
-                   {% if active == 'metrics' %}aria-current="page"{% endif %}>Evidence</a>
-                <a class="nav__link{% if active == 'demo' %} nav__link--active{% endif %}"
-                   href="{{ url_for('demo_page') }}"
-                   {% if active == 'demo' %}aria-current="page"{% endif %}>Review queue</a>
-                <a class="nav__link{% if active == 'live' %} nav__link--active{% endif %}"
-                   href="{{ url_for('live_page') }}"
-                   {% if active == 'live' %}aria-current="page"{% endif %}>Live ingestion</a>
-            </nav>
-        </div>
+                <a class="nav-link" href="{{ url_for('metrics_page') }}"
+                   {% if active == 'metrics' %}aria-current="page"{% endif %}>Metrics</a>
+                <a class="nav-link" href="{{ url_for('demo_page') }}"
+                   {% if active == 'demo' %}aria-current="page"{% endif %}>Demo</a>
+                <a class="nav-link" href="{{ url_for('live_page') }}"
+                   {% if active == 'live' %}aria-current="page"{% endif %}>Live</a>
+            </div>
+        </nav>
     </header>
 
-    <p class="disclosure">
-        <span class="shell">
-            <strong>Defense-only.</strong>
-            No control anywhere in this system can act on a payment. It scores, groups, explains, and
-            queues for human review &mdash; nothing else. A decision recorded here updates a status
-            field and appends one row to an immutable audit log; nothing is ever deleted or
-            overwritten. The model explains; the reviewer decides.
-        </span>
-    </p>
+    <div class="disclosure">
+        <div class="wrap">
+            <p>
+                <strong>Defense-only.</strong>
+                No control anywhere in this system can act on a payment. It scores, groups, explains, and
+                queues for human review &mdash; nothing else. A recorded decision updates a status field
+                and appends one row to an immutable audit log; nothing is ever deleted or overwritten.
+            </p>
+        </div>
+    </div>
 
-    <main class="shell" id="main">
+    <main id="main">
         {% block content %}{% endblock %}
     </main>
 
-    <footer class="colophon shell">
-        {% block colophon %}{% endblock %}
-        <p>
-            Every figure on this site is read from a committed artifact under <span class="mono">results/</span>
-            or from the review-queue database this instance is serving. There are no illustrative
-            numbers, no example customers, and no projected figures anywhere in this interface.
-        </p>
-        <p>
-            Independent hackathon submission. Not affiliated with, endorsed by, or a product of
-            any payment provider.
-        </p>
+    <footer class="foot">
+        <div class="wrap">
+            <div class="foot-grid">
+                <div>
+                    <p class="eyebrow">Fraud spike detector</p>
+                    <p style="margin:0;font-size:14px;color:color-mix(in srgb,#fff 78%,transparent)">
+                        Scorer, pattern watcher, explainer. Every decision is made by a human reviewer.
+                    </p>
+                </div>
+                <div>
+                    <p class="eyebrow">Run it</p>
+                    <ul class="foot-links">
+                        <li><a href="{{ url_for('demo_page') }}">Review queue</a></li>
+                        <li><a href="{{ url_for('live_page') }}">Live ingestion</a></li>
+                    </ul>
+                </div>
+                <div>
+                    <p class="eyebrow">Evidence</p>
+                    <ul class="foot-links">
+                        <li><a href="{{ url_for('metrics_page') }}">Metrics</a></li>
+                        <li><a href="{{ url_for('metrics_page') }}#live-scoring">Run the model</a></li>
+                    </ul>
+                </div>
+                <div>
+                    <p class="eyebrow">Status</p>
+                    <ul class="foot-links">
+                        <li><a href="{{ url_for('health') }}">Health check</a></li>
+                    </ul>
+                </div>
+            </div>
+            {% block colophon %}{% endblock %}
+            <p class="foot-note">
+                Every figure on this site is read from a committed artifact under <span class="mono">results/</span>,
+                or computed by the model at request time. There are no illustrative numbers, no example
+                customers, and no projected figures anywhere in this interface.
+                An independent hackathon submission &mdash; not affiliated with, endorsed by, or a product
+                of any payment provider.
+            </p>
+        </div>
     </footer>
 
     <script src="{{ url_for('static', filename='js/console.js') }}"></script>

@@ -1,28 +1,23 @@
 {#
   Contextual help affordance.
 
-  The explanation is rendered into the page as escaped text at request time and
-  simply revealed by a class toggle. There is no fetch, no template string, and
-  nothing assigned to innerHTML — the body arrives as a Jinja-escaped text node
-  like every other value on this site. `suffix` disambiguates ids when one topic
-  is referenced twice on the same page.
+  A <details> element, so it opens without JavaScript and closes with Escape
+  for free. The body is rendered by Jinja as escaped text at request time —
+  there is no fetch and no template string, which is why nothing here can put
+  untrusted markup on the page. `suffix` disambiguates ids when one topic is
+  referenced twice on the same page; `side` flips the panel when the affordance
+  sits near the right edge.
 #}
-{% macro help(topic, suffix='') %}
+{% macro help(topic, suffix='', side='') %}
 {%- set entry = help_topics.get(topic) -%}
 {%- if entry -%}
-{%- set panel_id = 'help-' ~ topic ~ suffix -%}
-<span class="help">
-    <button class="help__toggle" type="button"
-            aria-expanded="false" aria-controls="{{ panel_id }}"
-            data-help-toggle="{{ panel_id }}"
-            title="{{ entry.title }}">
-        <span aria-hidden="true">?</span>
-        <span class="visually-hidden">Explain: {{ entry.title }}</span>
-    </button>
-    <span class="help__panel" id="{{ panel_id }}" role="note" hidden>
-        <span class="help__title">{{ entry.title }}</span>
-        <span class="help__body">{{ entry.body }}</span>
-    </span>
-</span>
+<details class="hint{% if side == 'right' %} hint-right{% endif %}"
+         data-help-topic="{{ topic }}{{ suffix }}">
+    <summary aria-label="Explain: {{ entry.title }}">?</summary>
+    <div class="hint-panel" role="note">
+        <span class="hint-title">{{ entry.title }}</span>
+        <p>{{ entry.body }}</p>
+    </div>
+</details>
 {%- endif -%}
 {% endmacro %}

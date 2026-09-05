@@ -1,105 +1,110 @@
 {% extends "base.html" %}
 {% import "_help.html" as h with context %}
-{% block title %}Live ingestion · Fraud-Spike Detector{% endblock %}
+{% block title %}Live ingestion — Fraud spike detector{% endblock %}
 {% block description %}A real Razorpay test-mode payment ingested into the review queue — deliberately unscored, and labelled as such.{% endblock %}
 
 {% block content %}
-<div class="section-head">
-    <h1>Live ingestion {{ h.help('live_unscored') }}</h1>
-    <p>
-        A real payment, on a real payment rail, arriving in the review queue over a
-        signature-verified webhook &mdash; and carrying no risk score, on purpose.
-    </p>
-</div>
-
-<div class="live-trigger">
-    <div class="live-trigger__action">
-        <button class="btn btn--primary btn--live" type="button" id="btn-live-trigger">
-            Trigger live transaction
-        </button>
-        <p class="live-trigger__status" id="live-trigger-status" role="status" aria-live="polite"></p>
+<section>
+  <div class="wrap">
+    <p class="eyebrow reveal">Live</p>
+    <div class="split">
+      <div class="reveal">
+        <h1>A real payment, on a real rail, carrying no score.</h1>
+        <p>The ingestion path receives an actual test-mode payment over a signature-verified webhook and
+           queues it for human review &mdash; deliberately unscored. {{ h.help('live_unscored') }}</p>
+      </div>
+      <div class="reveal" data-delay="1">
+        <div class="live-trigger">
+          <div class="live-trigger-action">
+            <button class="btn btn-primary" type="button" id="btn-live-trigger">Trigger live transaction</button>
+            <p class="live-trigger-status" id="live-trigger-status" role="status" aria-live="polite"></p>
+          </div>
+          <p class="live-trigger-note">
+            <strong>Test mode only.</strong> Creates one &#8377;1 order against the sandbox and opens the
+            hosted checkout. A key that is not a test-mode key is refused before any network call is made,
+            so this control cannot reach a live payment environment.
+          </p>
+        </div>
+      </div>
     </div>
-    <p class="live-trigger__note">
-        <strong>Test mode only.</strong> Creates one &#8377;1 order against Razorpay's sandbox and opens
-        their hosted checkout. A key that is not a test-mode key is refused before any network call
-        is made, so this control cannot reach a live payment environment. Recording the order
-        requires the demo password; reading this page does not.
-    </p>
-</div>
-
-<section class="evidence-block">
-    <div class="section-head">
-        <h2>What happens, in order</h2>
-    </div>
-    <ol class="how__steps how__steps--tight">
-        <li class="how__step">
-            <p class="how__step-label">1</p>
-            <h3>One order is created</h3>
-            <p>
-                A single call to the orders endpoint, for a fixed one-rupee amount that is not
-                caller-supplied. This is the only outbound payment-rail call the application can
-                make: there is no code path to a refund, a capture, a payout, or a subscription,
-                and a test scans the package for one on every run.
-            </p>
-        </li>
-        <li class="how__step">
-            <p class="how__step-label">2</p>
-            <h3>The signature is verified before anything is read</h3>
-            <p>
-                The webhook body is HMAC-SHA256 verified against the signing secret, over the raw
-                bytes exactly as received. A payload that fails is rejected with a 400 and is never
-                parsed, stored, or logged. A repeated event id is recognised as a retry and ignored
-                rather than queued twice.
-            </p>
-        </li>
-        <li class="how__step">
-            <p class="how__step-label">3</p>
-            <h3>It is queued as explicitly unscored</h3>
-            <p>
-                The item enters the same review queue as everything else, marked with its own type,
-                served with a null score and an explicit unscored flag, and rendered on its own
-                branch in the interface &mdash; different wording, different labels, dashed border.
-                Not a colour difference: a viewer must not be able to mistake it for a scored item.
-            </p>
-        </li>
-    </ol>
+  </div>
 </section>
 
-<section class="evidence-block">
-    <div class="section-head">
-        <h2>Why there is no number here</h2>
+<section class="tinted">
+  <div class="wrap">
+    <p class="eyebrow reveal">What happens, in order</p>
+    <div class="flow">
+      <div class="flow-col reveal">
+        <p class="flow-index">01 &mdash; ORDER</p>
+        <h3>One order is created</h3>
+        <p style="font-size:14px">A single call to the orders endpoint, for a fixed one-rupee amount that
+           is not caller-supplied. This is the only outbound payment-rail call the application can make:
+           there is no path to a refund, a capture, a payout, or a subscription, and a test scans for one
+           on every run.</p>
+        <div class="flow-io"><b>Out:</b> order id</div>
+      </div>
+      <div class="flow-arrow" aria-hidden="true">
+        <svg width="28" height="12" viewBox="0 0 28 12" fill="none"><path d="M0 6h25M20 1l5 5-5 5" stroke="currentColor" stroke-width="1.5"/></svg>
+      </div>
+      <div class="flow-col reveal" data-delay="1">
+        <p class="flow-index">02 &mdash; VERIFY</p>
+        <h3>Signature checked before anything is read</h3>
+        <p style="font-size:14px">The webhook body is HMAC-SHA256 verified against the signing secret,
+           over the raw bytes exactly as received. A payload that fails is rejected with a 400 and is never
+           parsed, stored, or logged. A repeated event id is recognised as a retry and ignored rather than
+           queued twice.</p>
+        <div class="flow-io"><b>In:</b> signed webhook &nbsp;&middot;&nbsp; <b>Out:</b> verified payload</div>
+      </div>
+      <div class="flow-arrow" aria-hidden="true">
+        <svg width="28" height="12" viewBox="0 0 28 12" fill="none"><path d="M0 6h25M20 1l5 5-5 5" stroke="currentColor" stroke-width="1.5"/></svg>
+      </div>
+      <div class="flow-col reveal" data-delay="2">
+        <p class="flow-index">03 &mdash; QUEUE</p>
+        <h3>Queued as explicitly unscored</h3>
+        <p style="font-size:14px">The item enters the same review queue as everything else, marked with
+           its own type, served with a null score and an explicit unscored flag, and rendered on its own
+           branch &mdash; different wording, different labels, dashed border. Not a colour difference: a
+           viewer must not be able to mistake it for a scored item.</p>
+        <div class="flow-io"><b>Out:</b> unscored review item</div>
+      </div>
     </div>
-    <p class="prose">
-        The model was trained on the IEEE-CIS feature space &mdash; roughly 430 engineered columns,
-        including a large block of masked proprietary features and the causal graph features derived
-        from an entity's own transaction history. A payment webhook carries an amount, a currency, a
-        method, an order id, and a timestamp. The two do not overlap.
-    </p>
-    <p class="prose">
-        Filling the roughly 430 absent features with zeros and calling the model <em>would</em> return
-        a number. That number would be a property of the padding, not of the payment. This project
-        already shipped one metric that was an artifact of its data rather than its model, found it,
-        and deleted both the metric and the script behind it. Manufacturing a second one so a demo
-        looks more complete is not a trade it makes.
-    </p>
-    <p class="prose">
-        Real-time scoring would need the feature space derived from live data: a durable per-entity
-        history for the rolling co-occurrence features, identity signals available at authorisation
-        time, and a replacement for the masked proprietary block, which has no public definition and
-        cannot be reconstructed at all. A production system would train on its own feature space
-        rather than port this one. Until then, ingestion and scoring are separate capabilities here,
-        and the queue says so on every affected row.
-    </p>
+  </div>
 </section>
 
-<section class="evidence-block">
-    <div class="section-head">
-        <h2>Ingested so far</h2>
-        <p>
-            Live items currently sitting in this instance's queue. Free hosting tiers reset the
-            filesystem on redeploy, so this list is expected to be empty on a fresh boot.
-        </p>
+<section>
+  <div class="wrap">
+    <p class="eyebrow reveal">Why there is no number here</p>
+    <div class="split">
+      <div class="reveal">
+        <h2>The feature space does not overlap.</h2>
+      </div>
+      <div class="reveal" data-delay="1">
+        <p>The model was trained on the IEEE-CIS feature space &mdash; roughly 430 engineered columns,
+           including a large block of masked proprietary features and the causal graph features derived
+           from an entity&rsquo;s own transaction history. A payment webhook carries an amount, a currency,
+           a method, an order id, and a timestamp. The two do not overlap.</p>
+        <p>Filling the roughly 430 absent features with zeros and calling the model <em>would</em> return a
+           number. That number would be a property of the padding, not of the payment. This project already
+           shipped one metric that was an artifact of its data rather than its model, found it, and deleted
+           both the metric and the script behind it. Manufacturing a second one so a demo looks more
+           complete is not a trade it makes.</p>
+        <p>Real-time scoring would need the feature space derived from live data: a durable per-entity
+           history for the rolling co-occurrence features, identity signals available at authorisation
+           time, and a replacement for the masked proprietary block, which has no public definition and
+           cannot be reconstructed at all.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="tinted">
+  <div class="wrap">
+    <div class="section-hd reveal">
+      <h2>Ingested so far</h2>
+      <p>Live items currently in this instance&rsquo;s queue. Free hosting tiers reset the filesystem on
+         redeploy, so this list is expected to be empty on a fresh boot.</p>
     </div>
     <div id="live-items-container" aria-live="polite"></div>
+  </div>
 </section>
 {% endblock %}

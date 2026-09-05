@@ -193,7 +193,7 @@ def test_help_is_static_and_cannot_call_a_model():
         assert forbidden not in source, f"app.py reaches for {forbidden}"
 
     script = Path("static/js/console.js").read_text()
-    help_section = script[script.index("function initHelp"):]
+    help_section = script[script.index("function initHelp"):script.index("function initMotion")]
     assert "fetch(" not in help_section, "help content is fetched rather than rendered"
 
 
@@ -203,7 +203,7 @@ def test_help_content_reaches_the_page_as_escaped_text(client):
     entry = app_module.HELP_TOPICS["auc_pr"]
     assert entry["title"] in body
     assert entry["body"][:60] in body
-    assert 'data-help-toggle="help-auc_pr"' in body
+    assert 'data-help-topic="auc_pr"' in body
 
 
 # ---------------------------------------------------------------------------
@@ -295,7 +295,7 @@ def test_cold_start_ui_cannot_hang_silently():
     assert "Waking the server" in script
     assert "30 seconds" in script
 
-    css = Path("static/css/console.css").read_text()
+    css = Path("static/css/site.css").read_text()
     assert ".spinner" in css
     assert "prefers-reduced-motion" in css, "the spinner must respect reduced motion"
 

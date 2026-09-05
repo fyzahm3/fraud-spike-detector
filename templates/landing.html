@@ -1,179 +1,227 @@
 {% extends "base.html" %}
 {% import "_help.html" as h with context %}
-{% block title %}Fraud-Spike Detector · Explainable, human-gated escalation{% endblock %}
+{% block title %}Fraud spike detector — both sides of the trade, measured{% endblock %}
 
 {% block content %}
 {% set pc = evidence.phase_comparison %}
 {% set run = evidence.pipeline_run %}
 {% set split = evidence.split_manifest %}
 
-<section class="hero">
-    <h1 class="hero__title">Fraud detection that hands a person a decision, not a verdict.</h1>
-    <p class="hero__lede">
-        Per-transaction risk scoring, rolling per-entity spike aggregation, and a written brief for
-        every flagged item &mdash; delivered into an auditable queue where a human reviewer decides.
-        The system has no code path that can act on a payment, and automated tests enforce that on
-        every run. {{ h.help('human_decides') }}
-    </p>
-    <div class="hero__actions">
-        <a class="btn btn--primary" href="{{ url_for('demo_page') }}">Open the review queue</a>
-        <a class="btn" href="{{ url_for('metrics_page') }}">See the evidence</a>
+<!-- hero -->
+<section>
+  <div class="wrap">
+    <p class="eyebrow reveal">Fraud spike detection for card payments</p>
+    <div class="split">
+      <div class="reveal">
+        <h1>Catching fraud is easy if you don&rsquo;t care how much legitimate business you destroy.</h1>
+        <p>Flag everything and fraud goes to zero. So the only honest question is what a caught unit of
+           fraud costs in disrupted legitimate spending &mdash; and that is the number this system
+           reports first.</p>
+        <div class="btn-row">
+          <a class="btn btn-primary" href="{{ url_for('demo_page') }}">Open the review queue</a>
+          <a class="btn btn-secondary" href="{{ url_for('metrics_page') }}">See the evidence</a>
+        </div>
+        <p class="src">Public and read-only. No sign-in to look at anything.</p>
+      </div>
+
+      {% if pc %}
+      <div class="reveal" data-delay="1">
+        <div class="grid g-2 celled" style="gap:0">
+          <div class="stat">
+            <span class="stat-label">Value ratio {{ h.help('cost_ratio', '', 'right') }}</span>
+            <span class="stat-value">{{ '%.2f'|format(pc.baseline.ratio) }}&times; &rarr; {{ '%.2f'|format(pc.graph.ratio) }}&times;</span>
+            <span class="stat-note">Baseline model &rarr; with graph features.</span>
+          </div>
+          <div class="stat">
+            <span class="stat-label">AUC-PR {{ h.help('auc_pr', '', 'right') }}</span>
+            <span class="stat-value">{{ '%.4f'|format(pc.baseline.auc_pr) }} &rarr; {{ '%.4f'|format(pc.graph.auc_pr) }}</span>
+            <span class="stat-note">Graph features raised the core metric by nearly half again.</span>
+          </div>
+        </div>
+        <hr class="hair" style="margin:24px 0">
+        <div class="grid g-3 celled" style="gap:0">
+          <div class="stat">
+            <span class="stat-label">Test set</span>
+            <span class="stat-value num" style="font-size:24px">{{ '{:,}'.format(split.splits.test.n_rows) }}</span>
+            <span class="stat-note">held-out transactions, scored once</span>
+          </div>
+          <div class="stat">
+            <span class="stat-label">Throughput</span>
+            <span class="stat-value num" style="font-size:24px">{{ '{:,}'.format(run.throughput_txns_per_sec|int) }}/s</span>
+            <span class="stat-note">batch scoring, measured</span>
+          </div>
+          <div class="stat">
+            <span class="stat-label">False positives</span>
+            <span class="stat-value num" style="font-size:24px">{{ '{:,}'.format(pc.graph.fp) }}</span>
+            <span class="stat-note">down from {{ '{:,}'.format(pc.baseline.fp) }} at baseline</span>
+          </div>
+        </div>
+      </div>
+      {% endif %}
     </div>
-    <p class="hero__note">
-        Public and read-only. No sign-in to look at anything; the password applies only to recording
-        a decision or creating a test-mode order.
-    </p>
+  </div>
 </section>
 
+<!-- the problem -->
+<section class="tinted">
+  <div class="wrap">
+    <p class="eyebrow reveal">The problem</p>
+    <div class="split">
+      <h2 class="reveal">A payment company loses money twice, and usually measures once.</h2>
+      <div class="reveal" data-delay="1">
+        <p>The first loss is the fraudulent transaction that settles. The second is the real customer
+           whose payment is refused at checkout, who calls support, and who may not come back. Both are
+           denominated in money.</p>
+        <p>Most detection systems report recall, precision, and an ROC curve. None of those say what the
+           false positives cost. A model can improve on every published metric while making the business
+           worse, and nothing in the report will show it.</p>
+        {% if pc %}
+        <div class="guard">
+          <h4 style="margin-bottom:4px">Measuring both sides changes what &ldquo;good&rdquo; means</h4>
+          <p style="margin:0">Scored against the value ratio, our own baseline came out at
+             {{ '%.2f'|format(pc.baseline.ratio) }}&times; &mdash; it disrupted more legitimate value than
+             the fraudulent value it caught. That result is the reason the rest of this system exists.</p>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- how it works -->
+<section>
+  <div class="wrap">
+    <p class="eyebrow reveal">How it works</p>
+    <h2 class="reveal" style="margin-bottom:40px">Three stages. Only the last one writes prose.</h2>
+
+    <div class="flow">
+      <div class="flow-col reveal">
+        <p class="flow-index">01 &mdash; SCORER</p>
+        <h3>XGBoost risk score</h3>
+        <p style="font-size:14px">Each transaction is scored 0&ndash;1 for fraud risk. Trained on the
+           {% if split %}{{ '{:,}'.format(split.splits.train.n_rows) }}-row{% endif %} chronological
+           training split of the IEEE-CIS public dataset &mdash; real, anonymized card transactions.</p>
+        <div class="flow-io"><b>In:</b> transaction row &nbsp;&middot;&nbsp; <b>Out:</b> score 0&ndash;1</div>
+      </div>
+      <div class="flow-arrow" aria-hidden="true">
+        <svg width="28" height="12" viewBox="0 0 28 12" fill="none"><path d="M0 6h25M20 1l5 5-5 5" stroke="currentColor" stroke-width="1.5"/></svg>
+      </div>
+      <div class="flow-col reveal" data-delay="1">
+        <p class="flow-index">02 &mdash; PATTERN WATCHER</p>
+        <h3>Bursts, not outliers</h3>
+        <p style="font-size:14px">One odd transaction is noise; a burst is signal. Rolling 1h and 24h
+           windows per entity, normalized against that entity&rsquo;s own baseline, so a busy card is not
+           flagged for being busy. A graph links entities that share a device, email domain, or address. {{ h.help('graph_features') }}</p>
+        <div class="flow-io"><b>In:</b> score + entity history &nbsp;&middot;&nbsp; <b>Out:</b> ranked spike</div>
+      </div>
+      <div class="flow-arrow" aria-hidden="true">
+        <svg width="28" height="12" viewBox="0 0 28 12" fill="none"><path d="M0 6h25M20 1l5 5-5 5" stroke="currentColor" stroke-width="1.5"/></svg>
+      </div>
+      <div class="flow-col reveal" data-delay="2">
+        <p class="flow-index">03 &mdash; EXPLAINER</p>
+        <h3>A brief a human can act on</h3>
+        <p style="font-size:14px">A language model writes a plain-English brief for each flagged item. It
+           writes only the prose. Confidence, cost estimate, and recommended action are computed in Python
+           before the model is ever called. {{ h.help('llm_prose') }}</p>
+        <div class="flow-io"><b>In:</b> spike + computed fields &nbsp;&middot;&nbsp; <b>Out:</b> review brief</div>
+      </div>
+    </div>
+
+    <div class="panel panel-tinted guard reveal" style="margin-top:48px;border-radius:0 4px 4px 0">
+      <h3 style="margin-bottom:4px">The system cannot act</h3>
+      <p style="margin:0">It has no code path that can act on a payment in either direction. A human
+         reviewer makes every decision, and the absence of that path is enforced by tests, not policy. {{ h.help('human_decides') }}</p>
+    </div>
+  </div>
+</section>
+
+<!-- the evidence -->
 {% if pc %}
-<section class="headline">
-    <h2 class="section-title">What the graph features changed</h2>
-    <p class="section-intro">
-        Measured once on the held-out test split, comparing the baseline model against the variant
-        with causal graph features. Both numbers below are read from
-        <span class="mono">results/phase_comparison.json</span>.
-    </p>
-    <div class="headline__grid">
-        <div class="headline__stat">
-            <p class="headline__label">AUC-PR {{ h.help('auc_pr') }}</p>
-            <p class="headline__value num">{{ '%.4f'|format(pc.graph.auc_pr) }}</p>
-            <p class="headline__note">
-                from {{ '%.4f'|format(pc.baseline.auc_pr) }} baseline
-                &middot; <span class="delta-up">+{{ '%.4f'|format(pc.delta.auc_pr) }}</span>
-            </p>
+<section class="tinted">
+  <div class="wrap">
+    <p class="eyebrow reveal">The evidence</p>
+    <div class="split">
+      <div class="reveal">
+        <h2>The number that revealed the baseline was net-negative.</h2>
+        <p>Every unit of fraud a flag prevents costs some amount of legitimate spending disrupted. Under
+           1.00&times; caught per unit disrupted, the system is destroying more value than it protects.</p>
+        <p class="src">Held-out test set of
+           {% if split %}{{ '{:,}'.format(split.splits.test.n_rows) }}{% endif %} transactions,
+           chronologically split. Full breakdown on the
+           <a href="{{ url_for('metrics_page') }}">metrics page</a>.</p>
+      </div>
+      <div class="reveal" data-delay="1">
+        <div class="shift">
+          <div class="shift-from">
+            <span class="shift-cap">Baseline &mdash; net-negative</span>
+            <span class="shift-fig num">{{ '%.2f'|format(pc.baseline.ratio) }}&times;</span>
+          </div>
+          <div class="shift-arrow" aria-hidden="true">
+            <svg width="46" height="14" viewBox="0 0 46 14" fill="none"><path d="M0 7h42M36 1.5 42 7l-6 5.5" stroke="currentColor" stroke-width="2"/></svg>
+          </div>
+          <div class="shift-to">
+            <span class="shift-cap">With graph features</span>
+            <span class="shift-fig num">{{ '%.2f'|format(pc.graph.ratio) }}&times;</span>
+          </div>
         </div>
-        <div class="headline__stat">
-            <p class="headline__label">Value caught per unit disrupted {{ h.help('cost_ratio') }}</p>
-            <p class="headline__value num">{{ '%.2f'|format(pc.graph.ratio) }}&times;</p>
-            <p class="headline__note">
-                from {{ '%.2f'|format(pc.baseline.ratio) }}&times; baseline
-                &middot; crosses 1.0, where caught value exceeds disrupted value
-            </p>
+        <p class="stat-note" style="margin-top:8px">Fraudulent value caught per unit of legitimate value disrupted.</p>
+
+        <hr class="rule" style="margin:32px 0 24px">
+
+        <div class="bar-row">
+          <span>AUC-PR &mdash; baseline</span>
+          <span class="bar-track"><span class="bar-fill dim" style="--w:{{ '%.1f'|format(pc.baseline.auc_pr * 100) }}%"></span></span>
+          <span class="bar-val num">{{ '%.4f'|format(pc.baseline.auc_pr) }}</span>
         </div>
-        <div class="headline__stat">
-            <p class="headline__label">Recall</p>
-            <p class="headline__value num">{{ '%.1f'|format(pc.graph.recall * 100) }}%</p>
-            <p class="headline__note">
-                from {{ '%.1f'|format(pc.baseline.recall * 100) }}% baseline
-                &middot; {{ '{:,}'.format(pc.graph.tp) }} of
-                {{ '{:,}'.format(pc.graph.tp + pc.graph.fn) }} fraudulent transactions
-            </p>
+        <div class="bar-row">
+          <span>AUC-PR &mdash; graph</span>
+          <span class="bar-track"><span class="bar-fill" style="--w:{{ '%.1f'|format(pc.graph.auc_pr * 100) }}%"></span></span>
+          <span class="bar-val num">{{ '%.4f'|format(pc.graph.auc_pr) }}</span>
         </div>
-        <div class="headline__stat">
-            <p class="headline__label">False positives</p>
-            <p class="headline__value num">{{ '{:,}'.format(pc.graph.fp) }}</p>
-            <p class="headline__note">
-                down from {{ '{:,}'.format(pc.baseline.fp) }}
-                &middot; more fraud caught on fewer false alarms
-            </p>
-        </div>
+        <p class="src">Same model family, same split, same threshold policy. The only change is the graph feature block.</p>
+      </div>
     </div>
+  </div>
 </section>
 {% endif %}
 
-<section class="how">
-    <h2 class="section-title">How it works</h2>
-    <ol class="how__steps">
-        <li class="how__step">
-            <p class="how__step-label">1 &middot; Score</p>
-            <h3>Every transaction, on its own merits</h3>
-            <p>
-                A gradient-boosted model scores each transaction. Alongside the tabular features it
-                reads twelve causal co-occurrence features describing how a card, email, device, or
-                address has behaved over the previous hours and days &mdash; each computed from
-                strictly earlier transactions only. {{ h.help('graph_features', '-step') }}
-            </p>
+<!-- honest limitations -->
+<section>
+  <div class="wrap">
+    <p class="eyebrow reveal">Honest limitations</p>
+    <div class="split">
+      <div class="reveal">
+        <h2>What this is not.</h2>
+        <p>Stated here rather than in a footnote, because a fraud system that hides its edges is not
+           evaluable.</p>
+      </div>
+      <ul class="claims reveal" data-delay="1">
+        <li>
+          <span class="ct">US card data, not UPI</span>
+          <p>The IEEE-CIS dataset is US card-not-present transactions. Indian UPI has a different rail,
+             different fraud patterns, and different economics. Nothing here transfers without retraining
+             and re-validation, and no synthetic UPI data was generated to paper over the gap. {{ h.help('dataset_gap') }}</p>
         </li>
-        <li class="how__step">
-            <p class="how__step-label">2 &middot; Aggregate</p>
-            <h3>Bursts, not just outliers</h3>
-            <p>
-                Scores roll up per entity over 1-hour and 24-hour windows and are compared against
-                that entity's own earlier baseline. Coordinated abuse shows up as a burst that a
-                per-transaction score alone reads as unrelated events. {{ h.help('spike') }}
-            </p>
+        <li>
+          <span class="ct">Batch, not live infrastructure</span>
+          <p>Scoring runs in batch at roughly
+             {% if run %}{{ '{:,}'.format(run.throughput_txns_per_sec|int) }}{% endif %} transactions per
+             second. That is a throughput measurement, not a production latency guarantee, and there is no
+             streaming ingest.</p>
         </li>
-        <li class="how__step">
-            <p class="how__step-label">3 &middot; Explain</p>
-            <h3>A brief a reviewer can argue with</h3>
-            <p>
-                The score, the confidence band, the estimated cost of a false positive, and the
-                recommendation are all computed in Python. A language model writes the summary
-                paragraph and nothing else, so it cannot introduce a number or change a
-                recommendation. {{ h.help('llm_prose') }}
-            </p>
+        <li>
+          <span class="ct">Live payments are not scored</span>
+          <p>The ingestion demo receives a real test-mode payment and queues it marked explicitly as
+             unscored, because a payment webhook does not carry the feature space the model was trained on. {{ h.help('live_unscored') }}</p>
         </li>
-        <li class="how__step">
-            <p class="how__step-label">4 &middot; Decide</p>
-            <h3>The reviewer holds the decision</h3>
-            <p>
-                Items land in a queue with an append-only audit log. Resolving one updates a status
-                and writes a permanent row; a correction is a new row, never an edit. The action is
-                required and validated &mdash; a decision is never recorded by default.
-            </p>
+        <li>
+          <span class="ct">A perfect score was a bug</span>
+          <p>An earlier revision reported a perfect 1.0000 across every metric. That was label leakage in a
+             placeholder data generator. It was found, deleted, and documented. A perfect score in fraud
+             detection is essentially always a bug, and the honest response to one is to go looking for it.</p>
         </li>
-    </ol>
-</section>
-
-{% if run and split %}
-<section class="atglance">
-    <h2 class="section-title">Measured, not asserted</h2>
-    <div class="atglance__grid">
-        <div class="atglance__item">
-            <p class="atglance__value num">{{ '{:,}'.format(split.splits.test.n_rows) }}</p>
-            <p class="atglance__label">transactions in the held-out test split, scored once</p>
-        </div>
-        <div class="atglance__item">
-            <p class="atglance__value num">{{ '{:,}'.format(run.throughput_txns_per_sec|int) }}</p>
-            <p class="atglance__label">transactions scored per second, end to end</p>
-        </div>
-        <div class="atglance__item">
-            <p class="atglance__value num">{{ '{:,}'.format(run.total_spikes_detected) }}</p>
-            <p class="atglance__label">spike events grouped from that run</p>
-        </div>
-        <div class="atglance__item">
-            <p class="atglance__value num">3</p>
-            <p class="atglance__label">splits, each SHA-256 checksummed and verified before evaluation {{ h.help('leakage') }}</p>
-        </div>
+      </ul>
     </div>
-</section>
-{% endif %}
-
-<section class="honesty">
-    <h2 class="section-title">What this deliberately does not claim</h2>
-    <div class="honesty__grid">
-        <div class="honesty__item">
-            <h3>It does not act on payments</h3>
-            <p>
-                There is no interface to any payment action anywhere in the codebase, in either
-                direction. This is verified by source scans in the test suite rather than asserted
-                in a policy document.
-            </p>
-        </div>
-        <div class="honesty__item">
-            <h3>Live payments are not scored</h3>
-            <p>
-                The live-ingestion demo receives a real test-mode payment and queues it marked
-                explicitly as unscored, because a payment webhook does not contain the feature space
-                the model was trained on. {{ h.help('live_unscored') }}
-            </p>
-        </div>
-        <div class="honesty__item">
-            <h3>The training data is US card data</h3>
-            <p>
-                It is not UPI data, and no synthetic UPI data was generated to stand in for it.
-                The gap is documented rather than filled. {{ h.help('dataset_gap') }}
-            </p>
-        </div>
-        <div class="honesty__item">
-            <h3>No cross-dataset claim</h3>
-            <p>
-                Validation on a second payment rail was scoped and not completed in the build
-                window, so no transferability claim is made. An earlier revision reported perfect
-                scores on a placeholder generator; those were an artifact of label leakage, and both
-                the numbers and the script producing them were deleted.
-            </p>
-        </div>
-    </div>
+  </div>
 </section>
 {% endblock %}
