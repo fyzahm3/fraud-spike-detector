@@ -51,3 +51,4 @@ htmlcov/
 # Raw full-page screenshot captures (multi-MB source images). The cropped,
 # sized versions used by the README live in docs/img/ and are committed.
 /screenshot-*.png
+Screenshot *.png

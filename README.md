@@ -40,9 +40,9 @@ Take the built-in **guided tour** for a 14-step walkthrough of the whole project
 
 |  |  |
 |---|---|
-| <img src="docs/img/screenshot-landing.png" alt="Landing page"> | <img src="docs/img/screenshot-metrics.svg" alt="Evidence page"> |
+| <img src="docs/img/screenshot-landing.png" alt="Landing page"> | <img src="docs/img/screenshot-metrics.png" alt="Evidence page"> |
 | **Overview** — the cost trade, stated first | **Evidence** — every figure read from a committed file |
-| <img src="docs/img/screenshot-demo.png" alt="Review queue"> | <img src="docs/img/screenshot-live.svg" alt="Live ingestion"> |
+| <img src="docs/img/screenshot-demo.png" alt="Review queue"> | <img src="docs/img/screenshot-live.png" alt="Live ingestion"> |
 | **Review queue** — briefs a human decides on | **Live ingestion** — a real payment, scored at authorization |
 
 ## How it works
@@ -242,6 +242,8 @@ systems run a fast pass at authorization and a richer re-score later.
 
 Two models, two fields, two labels: `model_score` stays `null` for live items and the gateway score
 travels in its own object with its own AUC-PR attached, so neither can be mistaken for the other.
+
+<img src="docs/img/screenshot-gateway.png" alt="Gateway model versus full model on the same held-out split" width="100%">
 </details>
 
 <details>
