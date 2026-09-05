@@ -336,12 +336,36 @@
             className: "brief" + (scored ? "" : " brief-unscored"),
             id: "item-" + item.id,
             attrs: { "aria-label": "Brief " + item.id }
-        }, gatewayPanel
-            ? [head, summary, gatewayPanel, factorsTable(item.top_factors, scored), actionBar(item)]
-            : [head, summary, factorsTable(item.top_factors, scored), actionBar(item)]);
+        }, [
+            head,
+            /* .brief-body carries the horizontal padding. Without it the
+               summary and the factor table sit flush against the card border,
+               which is what made these cards read as cramped. */
+            el("div", { className: "brief-body" }, gatewayPanel
+                ? [summary, gatewayPanel, factorsTable(item.top_factors, scored)]
+                : [summary, factorsTable(item.top_factors, scored)]),
+            actionBar(item)
+        ]);
     }
 
     /* --- audit trail ----------------------------------------------------- */
+
+    /* A resolved live item still has the gateway model's score, and hiding it
+       behind "Not scored" was wrong — the reviewer saw a number when they made
+       the call, so the record of that call has to show the same number, marked
+       as the gateway model's. */
+    function auditScoreCell(entry) {
+        if (entry.scored !== false && entry.model_score !== null) {
+            return el("td", { className: "audit-score num", text: entry.model_score.toFixed(4) });
+        }
+        if (entry.gateway && typeof entry.gateway.score === "number") {
+            return el("td", { className: "audit-score num" }, [
+                el("span", { text: entry.gateway.score.toFixed(4) }),
+                el("span", { className: "audit-score-tag", text: "gateway" })
+            ]);
+        }
+        return el("td", { className: "audit-score audit-score-none", text: "Not scored" });
+    }
 
     function auditRow(entry) {
         var decision = DECISION_LABELS[entry.reviewer_action] || entry.reviewer_action;
@@ -356,12 +380,7 @@
                 text(" "),
                 typeTag(entry.flagged_type)
             ]),
-            entry.scored === false || entry.model_score === null
-                ? el("td", {
-                      className: "audit-score audit-score-none",
-                      text: "Not scored"
-                  })
-                : el("td", { className: "audit-score num", text: entry.model_score.toFixed(4) }),
+            auditScoreCell(entry),
             el("td", {}, [
                 el("span", {
                     className: "decision decision--" + entry.reviewer_action,

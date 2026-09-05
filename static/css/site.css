@@ -631,3 +631,21 @@ section.tinted { background: var(--canvas); }
 .gwrows { display: grid; grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr)); gap: 0 var(--s8); border-top: 1px solid var(--line); }
 .gwrows .verdict-row { padding: var(--s2) 0; }
 .factors-gateway { color: var(--accent-deep); font-weight: 600; }
+
+/* The gateway score in the audit trail, marked so it is never read as the
+   full model's number. */
+.audit-score-tag {
+    display: block;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent-deep);
+}
+
+/* Breathing room inside a brief. The body wrapper holds the inset; the
+   gateway panel then only needs vertical rhythm, not its own inset. */
+.brief-body > .brief-summary { margin-bottom: var(--s5, 20px); }
+.brief-body > .gateway-panel { margin: 0 0 var(--s4); }
+.brief-summary { line-height: 1.6; max-width: 84ch; }
+.factors { margin-top: var(--s2); }

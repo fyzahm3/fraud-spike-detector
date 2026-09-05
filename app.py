@@ -535,7 +535,12 @@ def demo_page():
 @app.route("/live")
 def live_page():
     """Public explanation of live ingestion, plus the test-mode trigger."""
-    return _render_page("live.html", active="live")
+    return _render_page(
+        "live.html",
+        active="live",
+        evidence=load_evidence(),
+        gateway=gateway_context(),
+    )
 
 
 @app.route("/api/pending")
@@ -570,6 +575,10 @@ def api_audit():
                     "flagged_type": shaped["flagged_type"],
                     "scored": shaped["scored"],
                     "model_score": shaped["model_score"],
+                    # A live item was reviewed with the gateway model's score in
+                    # front of the reviewer, so the record of that decision
+                    # carries the same number rather than reporting "not scored".
+                    "gateway": shaped.get("gateway"),
                     "reviewer_action": record["reviewer_action"],
                     "note": record["note"],
                     "timestamp": record["timestamp"],
