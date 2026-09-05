@@ -10,7 +10,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/site.css') }}">
 </head>
-<body>
+<body data-page="{{ active }}">
     <a class="skip-link" href="#main">Skip to content</a>
 
     <header class="nav-head" id="nav-head">
@@ -25,6 +25,9 @@
                    {% if active == 'demo' %}aria-current="page"{% endif %}>Demo</a>
                 <a class="nav-link" href="{{ url_for('live_page') }}"
                    {% if active == 'live' %}aria-current="page"{% endif %}>Live</a>
+                <button class="nav-tour" type="button" id="tour-start">
+                    <span aria-hidden="true">&#9654;</span> Guided tour
+                </button>
             </div>
         </nav>
     </header>
@@ -84,6 +87,23 @@
             </p>
         </div>
     </footer>
+
+    {#
+      Tour content, rendered by the server as escaped text. The engine reads
+      these nodes with textContent, so nothing here can become markup, and the
+      explanations are in the document from the first byte rather than fetched.
+    #}
+    <div id="tour-data" hidden>
+        {% for step in tour_steps %}
+        <div class="tour-step-data"
+             data-index="{{ step.index }}"
+             data-total="{{ step.total }}"
+             data-target="{{ step.target }}">
+            <span class="tour-step-title">{{ step.title }}</span>
+            <span class="tour-step-body">{{ step.body }}</span>
+        </div>
+        {% endfor %}
+    </div>
 
     <script src="{{ url_for('static', filename='js/console.js') }}"></script>
 </body>

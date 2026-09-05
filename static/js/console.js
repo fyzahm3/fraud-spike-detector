@@ -1194,6 +1194,253 @@
         window.addEventListener("scroll", update, { passive: true });
     }
 
+    /* --- guided tour ------------------------------------------------------
+
+       Fourteen steps across four routes, in the order the project should be
+       read. Each step highlights something real on the page and explains it;
+       the content is rendered by the server and read here as text, so the tour
+       cannot say anything the page does not already contain.
+
+       Two behaviours worth naming:
+
+       - It runs ONCE per tab. The marker lives in sessionStorage, so moving
+         between pages continues the sequence rather than restarting it, and
+         closing the tab forgets it. The button in the header replays it on
+         demand, which is what makes it useful in a demo rather than a nag.
+       - A step whose target is missing is skipped, not fatal. Sections
+         disappear when an artifact is absent, and a tour that breaks in that
+         case would be worse than no tour.
+       --------------------------------------------------------------------- */
+
+    var TOUR_SEEN = "fsd.tour.seen";
+    var TOUR_AT = "fsd.tour.at";
+    var TOUR_RUNNING = "fsd.tour.running";
+
+    var tour = { steps: [], pos: -1, nodes: null };
+
+    function store(key, value) {
+        try { window.sessionStorage.setItem(key, value); } catch (e) { /* private mode */ }
+    }
+    function recall(key) {
+        try { return window.sessionStorage.getItem(key); } catch (e) { return null; }
+    }
+    function forget(key) {
+        try { window.sessionStorage.removeItem(key); } catch (e) { /* no-op */ }
+    }
+
+    function readTourSteps() {
+        var host = byId("tour-data");
+        if (!host) { return []; }
+        return Array.prototype.map.call(
+            host.querySelectorAll(".tour-step-data"),
+            function (node) {
+                return {
+                    index: Number(node.getAttribute("data-index")),
+                    total: Number(node.getAttribute("data-total")),
+                    target: node.getAttribute("data-target"),
+                    title: node.querySelector(".tour-step-title").textContent,
+                    body: node.querySelector(".tour-step-body").textContent
+                };
+            }
+        );
+    }
+
+    var TOUR_ORDER = ["home", "metrics", "demo", "live"];
+    var TOUR_HREF = { home: "/", metrics: "/metrics", demo: "/demo", live: "/live" };
+
+    function currentPage() {
+        return document.body.getAttribute("data-page") || "";
+    }
+
+    function nextPageAfter(page) {
+        var i = TOUR_ORDER.indexOf(page);
+        return (i > -1 && i < TOUR_ORDER.length - 1) ? TOUR_ORDER[i + 1] : null;
+    }
+
+    function tourChrome() {
+        if (tour.nodes) { return tour.nodes; }
+
+        var spot = el("div", { className: "tour-spot", id: "tour-spot" });
+        var title = el("p", { className: "tour-title" });
+        var body = el("p", { className: "tour-body" });
+        var count = el("span", { className: "tour-count" });
+
+        var prev = el("button", { className: "btn btn-quiet tour-prev", text: "Back", attrs: { type: "button" } });
+        var next = el("button", { className: "btn btn-primary tour-next", text: "Next", attrs: { type: "button" } });
+        var end = el("button", { className: "tour-end", text: "Skip tour", attrs: { type: "button" } });
+
+        prev.addEventListener("click", function () { moveTour(-1); });
+        next.addEventListener("click", function () { moveTour(1); });
+        end.addEventListener("click", function () { endTour(true); });
+
+        var card = el("div", { className: "tour-card", id: "tour-card", attrs: { role: "dialog", "aria-live": "polite" } }, [
+            el("div", { className: "tour-card-hd" }, [count, end]),
+            title, body,
+            el("div", { className: "tour-actions" }, [prev, next])
+        ]);
+
+        var veil = el("div", { className: "tour-veil", id: "tour-veil" });
+        veil.addEventListener("click", function () { endTour(true); });
+
+        document.body.appendChild(veil);
+        document.body.appendChild(spot);
+        document.body.appendChild(card);
+        tour.nodes = { spot: spot, card: card, veil: veil, title: title, body: body,
+                       count: count, prev: prev, next: next };
+        return tour.nodes;
+    }
+
+    function placeTour(target, step) {
+        var n = tourChrome();
+        var box = target.getBoundingClientRect();
+        var pad = 8;
+        var top = box.top + window.scrollY - pad;
+        var left = box.left + window.scrollX - pad;
+
+        n.spot.style.top = top + "px";
+        n.spot.style.left = left + "px";
+        n.spot.style.width = (box.width + pad * 2) + "px";
+        n.spot.style.height = (box.height + pad * 2) + "px";
+
+        n.title.textContent = step.title;
+        n.body.textContent = step.body;
+        n.count.textContent = "Step " + (step.index + 1) + " of " + step.total;
+        n.prev.disabled = step.index === 0;
+        n.next.textContent = step.index === step.total - 1 ? "Finish" : "Next";
+
+        /* On a narrow screen the card is a bottom sheet and needs no placing;
+           on a wide one it sits under the highlight, nudged back inside the
+           viewport rather than allowed to hang off the edge. */
+        if (window.matchMedia("(max-width: 760px)").matches) {
+            n.card.style.top = "";
+            n.card.style.left = "";
+            return;
+        }
+        var cardW = 380;
+        var cardTop = top + box.height + pad * 2 + 12;
+        var cardLeft = Math.min(
+            Math.max(12, left),
+            Math.max(12, document.documentElement.clientWidth - cardW - 12)
+        );
+        n.card.style.top = cardTop + "px";
+        n.card.style.left = cardLeft + "px";
+    }
+
+    function showTourStep(pos) {
+        var step = tour.steps[pos];
+        if (!step) { return false; }
+        var target = document.querySelector(step.target);
+        if (!target || !target.getBoundingClientRect().height) { return false; }
+
+        tour.pos = pos;
+        store(TOUR_AT, String(step.index));
+        document.body.classList.add("tour-open");
+
+        /* The highlight is positioned in DOCUMENT coordinates, so it is placed
+           immediately and correctly regardless of where the page is scrolled.
+           It is placed a second time once the scroll and any reveal transitions
+           have settled, because those can change an element's height under it. */
+        placeTour(target, step);
+        target.scrollIntoView({
+            block: "center",
+            behavior: prefersReducedMotion() ? "auto" : "smooth"
+        });
+        window.setTimeout(function () { placeTour(target, step); }, 380);
+        window.setTimeout(function () { placeTour(target, step); }, 800);
+        return true;
+    }
+
+    function moveTour(delta) {
+        var pos = tour.pos + delta;
+        while (pos >= 0 && pos < tour.steps.length) {
+            if (showTourStep(pos)) { return; }
+            pos += delta;
+        }
+        if (delta > 0) {
+            var next = nextPageAfter(currentPage());
+            if (next) {
+                store(TOUR_RUNNING, "1");
+                window.location.href = TOUR_HREF[next];
+                return;
+            }
+            endTour(true);
+            return;
+        }
+        endTour(true);
+    }
+
+    function endTour(markSeen) {
+        document.body.classList.remove("tour-open");
+        if (tour.nodes) {
+            [tour.nodes.veil, tour.nodes.spot, tour.nodes.card].forEach(function (n) {
+                if (n && n.parentNode) { n.parentNode.removeChild(n); }
+            });
+            tour.nodes = null;
+        }
+        tour.pos = -1;
+        forget(TOUR_RUNNING);
+        if (markSeen) { store(TOUR_SEEN, "1"); }
+    }
+
+    function startTour(fromStart) {
+        tour.steps = readTourSteps();
+        if (!tour.steps.length) {
+            var next = nextPageAfter(currentPage());
+            if (next) { store(TOUR_RUNNING, "1"); window.location.href = TOUR_HREF[next]; }
+            return;
+        }
+        var at = fromStart ? -1 : Number(recall(TOUR_AT) || -1);
+        var pos = 0;
+        for (var i = 0; i < tour.steps.length; i += 1) {
+            if (tour.steps[i].index >= at) { pos = i; break; }
+        }
+        store(TOUR_RUNNING, "1");
+        if (!showTourStep(pos)) { moveTour(1); }
+    }
+
+    function initTour() {
+        var button = byId("tour-start");
+        if (button) {
+            button.addEventListener("click", function () {
+                /* Replay means the whole sequence, from step one. Step one
+                   lives on the overview, so from anywhere else the button goes
+                   there first rather than starting halfway through. */
+                forget(TOUR_AT);
+                forget(TOUR_SEEN);
+                endTour(false);
+                if (currentPage() !== TOUR_ORDER[0]) {
+                    store(TOUR_RUNNING, "1");
+                    window.location.href = TOUR_HREF[TOUR_ORDER[0]];
+                    return;
+                }
+                startTour(true);
+            });
+        }
+        if (!byId("tour-data")) { return; }
+
+        document.addEventListener("keydown", function (event) {
+            if (!document.body.classList.contains("tour-open")) { return; }
+            if (event.key === "Escape") { endTour(true); }
+            if (event.key === "ArrowRight") { moveTour(1); }
+            if (event.key === "ArrowLeft") { moveTour(-1); }
+        });
+
+        window.addEventListener("resize", function () {
+            if (!document.body.classList.contains("tour-open")) { return; }
+            var step = tour.steps[tour.pos];
+            if (!step) { return; }
+            var target = document.querySelector(step.target);
+            if (target) { placeTour(target, step); }
+        });
+
+        /* Mid-tour on a new page: continue. Otherwise offer it once per tab. */
+        if (recall(TOUR_RUNNING) === "1") {
+            window.setTimeout(function () { startTour(false); }, 400);
+        } else if (recall(TOUR_SEEN) !== "1") {
+            window.setTimeout(function () { startTour(true); }, 900);
+        }
+    }
+
     /* --- page setup -------------------------------------------------------
 
        One script serves four pages, so every block is guarded on the elements
@@ -1204,6 +1451,7 @@
     initHelp();
     initMotion();
     initNavState();
+    initTour();
 
     Array.prototype.forEach.call(document.querySelectorAll(".tab"), function (tab) {
         tab.addEventListener("click", function () { showView(tab.dataset.view); });

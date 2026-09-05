@@ -342,6 +342,108 @@ def test_recording_a_decision_is_visibly_confirmed():
         assert selector in css, f"{selector} has no styling"
 
 
+# ---------------------------------------------------------------------------
+# Guided tour
+# ---------------------------------------------------------------------------
+
+
+def test_tour_walks_the_whole_project_in_order(client):
+    """Fourteen steps across four routes, contiguous and in reading order."""
+    steps = app_module.TOUR_STEPS
+    assert len(steps) >= 12, "the tour should cover the project, not a corner of it"
+
+    pages = [s["page"] for s in steps]
+    assert set(pages) == {"home", "metrics", "demo", "live"}, "a route is left out"
+    # Grouped by page, in the order a reader should meet them.
+    assert pages == sorted(pages, key=["home", "metrics", "demo", "live"].index)
+
+    for step in steps:
+        assert step["title"].strip()
+        assert len(step["body"]) > 150, f"{step['title']} is too thin to teach anything"
+        assert step["target"].strip()
+
+    # Indices are contiguous and every page's steps are served to that page.
+    for page in ("home", "metrics", "demo", "live"):
+        served = app_module.tour_steps_for(page)
+        assert served, f"{page} has no steps"
+        assert all(s["total"] == len(steps) for s in served)
+        assert all(s["page"] == page for s in served)
+
+    all_indices = sorted(s["index"] for p in pages for s in app_module.tour_steps_for(p))
+    assert sorted(set(all_indices)) == list(range(len(steps)))
+
+
+def test_tour_steps_reach_the_page_as_escaped_text(client):
+    """Rendered by the server, read as text — never fetched, never markup."""
+    for path, page in (("/", "home"), ("/metrics", "metrics"),
+                       ("/demo", "demo"), ("/live", "live")):
+        body = _text(client, path)
+        expected = app_module.tour_steps_for(page)
+        assert body.count('class="tour-step-data"') == len(expected), path
+        assert 'id="tour-start"' in body, f"{path} has no way to replay the tour"
+        assert f'data-page="{page}"' in body
+        # The first step's prose is present in the document from the first byte.
+        assert expected[0]["title"] in body
+
+
+def test_tour_runs_once_per_tab_and_can_be_replayed():
+    """Auto-start once, remembered per tab, and always replayable on demand.
+
+    sessionStorage rather than localStorage: the tour should introduce the
+    project to a new visitor once, follow them across pages instead of
+    restarting on each one, and be forgotten when the tab closes.
+    """
+    script = Path("static/js/console.js").read_text()
+    assert "sessionStorage" in script
+    assert "localStorage" not in script.split("function initTour")[0][-4000:], (
+        "the tour must not persist beyond the tab"
+    )
+    for marker in ("fsd.tour.seen", "fsd.tour.at", "fsd.tour.running"):
+        assert marker in script, marker
+
+    tour_section = script[script.index("var TOUR_SEEN"):script.index("function initTour")]
+    assert "fetch(" not in tour_section, "tour content is fetched rather than rendered"
+
+    # Continues across a navigation instead of restarting.
+    assert "nextPageAfter" in script
+    # A step whose target is missing is skipped rather than breaking the run.
+    assert "return false" in script
+
+
+# ---------------------------------------------------------------------------
+# Mobile
+# ---------------------------------------------------------------------------
+
+
+def test_layout_is_built_for_a_phone():
+    """The rules that stop a 375px screen scrolling sideways.
+
+    Each of these was added in response to a measured overflow, not a guess:
+    an unbreakable file path, a flex-basis wider than the screen, and fixed
+    overlay chrome that stretched to the overflowed document width.
+    """
+    css = Path("static/css/site.css").read_text()
+
+    assert "@media (max-width: 760px)" in css, "no phone breakpoint"
+    assert "@media (max-width: 420px)" in css, "no small-phone breakpoint"
+
+    # Long unbreakable tokens (file paths, checksums, entity ids).
+    assert "overflow-wrap: anywhere" in css
+
+    # A flex-basis of 24rem cannot shrink below a 375px viewport on its own.
+    assert "min-width: 0" in css
+
+    # Touch targets.
+    assert "min-height: 44px" in css
+
+    # The tour card becomes a bottom sheet rather than a floating box.
+    assert "100vw" in css
+
+    # The viewport meta is what makes any of it apply.
+    base = Path("templates/base.html").read_text()
+    assert 'name="viewport"' in base and "width=device-width" in base
+
+
 def test_health_is_public_and_cheap_enough_to_ping(client):
     """The external uptime monitor pings this every few minutes."""
     res = client.get("/health")

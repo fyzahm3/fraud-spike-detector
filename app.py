@@ -279,6 +279,212 @@ HELP_TOPICS: dict[str, dict[str, str]] = {
     },
 }
 
+# ---------------------------------------------------------------------------
+# The guided tour.
+#
+# Fourteen steps across the four routes, in the order the project should be
+# read: the data and how it was split, what the model achieved and what that
+# cost, the model running live, the human review it feeds, and finally the
+# payment rail. A judge should be able to press one button and be walked
+# through the whole argument without knowing where to click.
+#
+# Static prose, like HELP_TOPICS and for the same reason: an improvised
+# explanation of this project's own evaluation protocol is the one text where a
+# plausible wrong answer is worse than silence. Each step names a CSS selector
+# on its page; a step whose target is absent is skipped rather than breaking
+# the sequence, which is what keeps the tour working when an artifact is
+# missing and a section does not render.
+# ---------------------------------------------------------------------------
+
+TOUR_STEPS: list[dict[str, str]] = [
+    # --- Overview -----------------------------------------------------
+    {
+        "page": "home",
+        "target": ".hero__title, h1",
+        "title": "The question this project answers",
+        "body": (
+            "Catching fraud is trivial if you ignore what it costs. Flag every "
+            "transaction and fraud goes to zero, along with the business. So the "
+            "measure that matters is how much fraudulent value you catch per unit "
+            "of legitimate value you disrupt \u2014 and that is the number this "
+            "system reports first, before any accuracy figure."
+        ),
+    },
+    {
+        "page": "home",
+        "target": ".headline__grid, .grid.g-2",
+        "title": "The headline result",
+        "body": (
+            "Adding twelve causal graph features moved the value ratio from "
+            "below 1.0 to above it \u2014 from destroying more legitimate value "
+            "than it protected, to protecting more than it destroys. AUC-PR rose "
+            "by roughly half again over the baseline. Both figures are read from "
+            "a committed file at request time, never typed into the page."
+        ),
+    },
+    {
+        "page": "home",
+        "target": ".flow",
+        "title": "Three stages, one of which writes prose",
+        "body": (
+            "A model scores each transaction. A pattern watcher rolls those "
+            "scores up per entity to catch bursts rather than isolated outliers. "
+            "Only then does a language model write a brief \u2014 and it writes "
+            "the prose only. The score, the confidence, the cost estimate and the "
+            "recommendation are all computed in Python before it is called, so a "
+            "hallucination costs a clumsy sentence, never a wrong decision."
+        ),
+    },
+    {
+        "page": "home",
+        "target": ".claims",
+        "title": "What it deliberately does not claim",
+        "body": (
+            "Stated on the front page rather than in a footnote. US card data, "
+            "not UPI. Batch throughput, not a latency guarantee. No action path "
+            "of any kind. And an earlier revision that reported a perfect 1.0000 "
+            "\u2014 which was label leakage in a placeholder generator, found, "
+            "deleted and documented. A perfect score in fraud detection is almost "
+            "always a bug."
+        ),
+    },
+    # --- Evidence -----------------------------------------------------
+    {
+        "page": "metrics",
+        "target": "#split-section, .table-wrap",
+        "title": "Start with the data and how it was split",
+        "body": (
+            "590,540 real anonymised card transactions from the IEEE-CIS public "
+            "dataset, split chronologically \u2014 the earliest 70% to train, the "
+            "next 15% to tune, the final 15% held out. Never a random shuffle: "
+            "that would let the model learn from transactions that happened after "
+            "the ones it is scored on, which no deployed system can do. Each split "
+            "is SHA-256 checksummed, and evaluation refuses to run if a checksum "
+            "has drifted."
+        ),
+    },
+    {
+        "page": "metrics",
+        "target": ".datatable, .table",
+        "title": "What the graph features bought",
+        "body": (
+            "The same held-out data, scored once by each variant. The only "
+            "difference between the two columns is the twelve causal "
+            "co-occurrence features \u2014 how a card, email, device or address "
+            "has behaved over the previous 24 hours and 7 days, each computed "
+            "from strictly earlier transactions only. More fraud caught, on fewer "
+            "false alarms."
+        ),
+    },
+    {
+        "page": "metrics",
+        "target": "#gateway",
+        "title": "What is knowable at authorization",
+        "body": (
+            "A second model, trained on the same data and split but restricted to "
+            "the seven fields a payment webhook actually carries. It is much "
+            "weaker, and that gap is the point: it measures what an entity's "
+            "accumulated history is worth. This is the model that scores a real "
+            "payment on the Live page."
+        ),
+    },
+    {
+        "page": "metrics",
+        "target": "#live-scoring",
+        "title": "Run the model yourself",
+        "body": (
+            "Everything above is a measurement taken during evaluation. This is "
+            "the model itself: pick a real held-out transaction and the trained "
+            "XGBoost booster scores it in this web process, on request. The "
+            "sample deliberately includes genuine false positives and fraud the "
+            "model missed, because a demo of only clean hits misrepresents the "
+            "system."
+        ),
+    },
+    # --- Review queue -------------------------------------------------
+    {
+        "page": "demo",
+        "target": ".kpis",
+        "title": "The queue a reviewer actually works",
+        "body": (
+            "Thirty real briefs, produced by scoring the held-out split with the "
+            "trained model. Ground-truth labels are deliberately absent from this "
+            "database, so the console shows a reviewer exactly what a reviewer "
+            "would see \u2014 no peeking at the answer."
+        ),
+    },
+    {
+        "page": "demo",
+        "target": ".brief",
+        "title": "A brief, and its evidence",
+        "body": (
+            "Each item carries its score, the model's confidence, the estimated "
+            "cost of dismissing it in error, and the top contributing features "
+            "with the direction each pushed. Every factor shown is a model input, "
+            "never a conclusion. The reviewer decides; the system only explains."
+        ),
+    },
+    {
+        "page": "demo",
+        "target": ".tabs",
+        "title": "Every decision is permanent",
+        "body": (
+            "Resolving an item updates a status field and appends one row to an "
+            "append-only audit log. Nothing is ever edited or deleted \u2014 a "
+            "correction is a new row. The action is required and validated, so a "
+            "decision nobody made can never reach the log."
+        ),
+    },
+    # --- Live ---------------------------------------------------------
+    {
+        "page": "live",
+        "target": ".panel-tinted.guard, .panel",
+        "title": "A real payment, on a real rail",
+        "body": (
+            "This page is not a dataset. A real order is created against a real "
+            "payment gateway in test mode, and the signed webhook that comes back "
+            "is verified over its raw bytes before anything is parsed. What "
+            "arrives is a payment that was never in the training data."
+        ),
+    },
+    {
+        "page": "live",
+        "target": ".grid.g-2",
+        "title": "Two passes, because data arrives twice",
+        "body": (
+            "At authorization there is no history \u2014 no device graph, no "
+            "email-cluster signal \u2014 so the gateway model scores what is "
+            "knowable in milliseconds. Once history accumulates, the same feature "
+            "code re-scores the payment with the full model. That is how "
+            "production fraud infrastructure is actually shaped."
+        ),
+    },
+    {
+        "page": "live",
+        "target": "#live-items-container",
+        "title": "And it never fakes the difference",
+        "body": (
+            "An ingested payment shows the gateway model's score, labelled as "
+            "such, with its own measured performance beside it. It carries no "
+            "full-model score, because those 443 features genuinely do not exist "
+            "for it. Two models, two labels, and a number is never shown without "
+            "saying which model produced it. That is the whole discipline of this "
+            "project in one card."
+        ),
+    },
+]
+
+
+def tour_steps_for(page: str) -> list[dict[str, object]]:
+    """Steps for one page, carrying their index in the whole sequence."""
+    total = len(TOUR_STEPS)
+    return [
+        {"index": i, "total": total, **step}
+        for i, step in enumerate(TOUR_STEPS)
+        if step["page"] == page
+    ]
+
+
 # Reading this site is public; changing its state is not.
 #
 # The gate is drawn on the HTTP method rather than on a list of public paths,
@@ -496,6 +702,8 @@ def _render_page(template: str, **context):
         template,
         csrf_token=token,
         help_topics=HELP_TOPICS,
+        tour_steps=tour_steps_for(context.get("active", "")),
+        tour_total=len(TOUR_STEPS),
         **context,
     ))
     response.set_cookie(
