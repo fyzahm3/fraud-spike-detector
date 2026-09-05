@@ -270,7 +270,7 @@
         var scoreblock;
         if (scored) {
             scoreblock = el("div", { className: "brief-scoreblock" }, [
-                el("span", { className: "brief-score num", text: item.model_score.toFixed(4) }),
+                el("span", { className: "brief-score num", text: formatScore(item.model_score) }),
                 el("span", { className: "brief-score-label", text: "Risk score \u00b7 full model" })
             ]);
         } else if (item.gateway) {
@@ -279,7 +279,7 @@
             scoreblock = el("div", { className: "brief-scoreblock" }, [
                 el("span", {
                     className: "brief-score brief-score-gateway num",
-                    text: item.gateway.score.toFixed(4)
+                    text: formatScore(item.gateway.score)
                 }),
                 el("span", { className: "brief-score-label", text: "Gateway score" })
             ]);
@@ -310,10 +310,10 @@
                 scoreRow("Gateway decision", g.score >= g.threshold
                     ? "Above threshold \u2014 send for review"
                     : "Below threshold \u2014 no action indicated"),
-                scoreRow("Gateway threshold", g.threshold.toFixed(4)),
+                scoreRow("Gateway threshold", formatScore(g.threshold)),
                 scoreRow("Features available now", String(g.n_features)),
-                scoreRow("Gateway AUC-PR", g.auc_pr.toFixed(4)),
-                scoreRow("Full model AUC-PR", g.full_model_auc_pr.toFixed(4)
+                scoreRow("Gateway AUC-PR", formatScore(g.auc_pr)),
+                scoreRow("Full model AUC-PR", formatScore(g.full_model_auc_pr)
                     + " (on " + g.full_model_n_features + " features)")
             ]);
             gatewayPanel = el("div", { className: "gateway-panel" }, [
@@ -356,11 +356,11 @@
        as the gateway model's. */
     function auditScoreCell(entry) {
         if (entry.scored !== false && entry.model_score !== null) {
-            return el("td", { className: "audit-score num", text: entry.model_score.toFixed(4) });
+            return el("td", { className: "audit-score num", text: formatScore(entry.model_score) });
         }
         if (entry.gateway && typeof entry.gateway.score === "number") {
             return el("td", { className: "audit-score num" }, [
-                el("span", { text: entry.gateway.score.toFixed(4) }),
+                el("span", { text: formatScore(entry.gateway.score) }),
                 el("span", { className: "audit-score-tag", text: "gateway" })
             ]);
         }
@@ -448,8 +448,8 @@
             var lowest = scoredItems.reduce(function (min, item) {
                 return Math.min(min, item.model_score);
             }, Infinity);
-            byId("metric-score").textContent = (total / scoredItems.length).toFixed(4);
-            byId("metric-score-note").textContent = "Lowest in queue " + lowest.toFixed(4) +
+            byId("metric-score").textContent = formatScore(total / scoredItems.length);
+            byId("metric-score-note").textContent = "Lowest in queue " + formatScore(lowest) +
                 (unscored ? " \u00b7 " + unscored + " unscored excluded" : "");
         }
 
@@ -938,6 +938,20 @@
         false_negative: "Wrong \u2014 fraud, and the model missed it"
     };
 
+    /* Scores are the most real numbers on this site, so they must not be
+       rounded into looking fake. The top of the queue genuinely scores
+       0.9999834, and four decimal places render that as "1.0000" — a value the
+       model never produced and which reads, to anyone who knows the maths, as a
+       hard-coded placeholder. Extremes therefore get more precision rather than
+       a rounder-looking lie. */
+    function formatScore(value) {
+        if (typeof value !== "number" || !isFinite(value)) { return "\u2014"; }
+        var rounded = Number(value.toFixed(4));
+        if (rounded >= 1 && value < 1) { return value.toFixed(6); }
+        if (rounded <= 0 && value > 0) { return value.toFixed(6); }
+        return value.toFixed(4);
+    }
+
     function money2(value) {
         return Number(value).toLocaleString("en-US", {
             style: "currency", currency: "USD", minimumFractionDigits: 2
@@ -966,12 +980,12 @@
         ]);
 
         var score = el("div", { className: "verdict-scoreblock" }, [
-            el("span", { className: "verdict-score num", text: result.model_score.toFixed(6) }),
+            el("span", { className: "verdict-score num", text: formatScore(result.model_score) }),
             el("span", { className: "verdict-score-label", text: "Risk score, computed just now" })
         ]);
 
         var rows = el("div", { className: "verdict-rows" }, [
-            scoreRow("Decision threshold", result.threshold.toFixed(6)),
+            scoreRow("Decision threshold", formatScore(result.threshold)),
             scoreRow("Transaction ID", String(result.transaction_id)),
             scoreRow("Amount", money2(result.amount)),
             scoreRow("Ground truth", result.actual_label === 1 ? "Fraud" : "Legitimate"),

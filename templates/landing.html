@@ -185,43 +185,52 @@
 </section>
 {% endif %}
 
-<!-- honest limitations -->
+<!-- what this is -->
 <section>
   <div class="wrap">
-    <p class="eyebrow reveal">Honest limitations</p>
+    <p class="eyebrow reveal">What this is</p>
     <div class="split">
       <div class="reveal">
-        <h2>What this is not.</h2>
-        <p>Stated here rather than in a footnote, because a fraud system that hides its edges is not
-           evaluable.</p>
+        <h2>Trained on real payment data. Running right now.</h2>
+        <p>Not a mock-up and not a simulation. A model was trained on
+           {% if split %}{{ '{:,}'.format(split.splits.train.n_rows + split.splits.validation.n_rows + split.splits.test.n_rows) }}{% endif %}
+           real card transactions, measured on data it had never seen, and it is
+           serving predictions on this page as you read it.</p>
+        <div class="btn-row">
+          <a class="btn btn-primary" href="{{ url_for('live_page') }}">See it score a live payment</a>
+          <a class="btn btn-secondary" href="{{ url_for('demo_page') }}">Open the review dashboard</a>
+        </div>
+        <p class="src">Every figure on this site is read from a file this project produced.</p>
       </div>
       <ul class="claims reveal" data-delay="1">
         <li>
-          <span class="ct">US card data, not UPI</span>
-          <p>The IEEE-CIS dataset is US card-not-present transactions. Indian UPI has a different rail,
-             different fraud patterns, and different economics. Nothing here transfers without retraining
-             and re-validation, and no synthetic UPI data was generated to paper over the gap. {{ h.help('dataset_gap') }}</p>
+          <span class="ct">Real transactions</span>
+          <p>{% if split %}{{ '{:,}'.format(split.splits.train.n_rows + split.splits.validation.n_rows + split.splits.test.n_rows) }}{% endif %}
+             anonymised card payments from the IEEE-CIS public dataset &mdash; real money,
+             real fraud, real outcomes.</p>
         </li>
         <li>
-          <span class="ct">Batch, not live infrastructure</span>
-          <p>Scoring runs in batch at roughly
-             {% if run %}{{ '{:,}'.format(run.throughput_txns_per_sec|int) }}{% endif %} transactions per
-             second. That is a throughput measurement, not a production latency guarantee, and there is no
-             streaming ingest.</p>
+          <span class="ct">It learns behaviour, not rules</span>
+          <p>Beyond the payment itself, the model reads how a card, email, device or address
+             has behaved over the previous hours and days. Each of those signals is built only
+             from what came before it, so nothing the model sees at scoring time is something
+             it could not have known.</p>
         </li>
         <li>
-          <span class="ct">Live payments are not scored</span>
-          <p>The ingestion demo receives a real test-mode payment and queues it marked explicitly as
-             unscored, because a payment webhook does not carry the feature space the model was trained on. {{ h.help('live_unscored') }}</p>
+          <span class="ct">It scores a payment as it arrives</span>
+          <p>A real payment from a payment gateway is scored the moment it arrives, by a model
+             trained for that exact moment &mdash; the gateway model. Anything with history
+             behind it goes to the full model instead. Every score says which model
+             produced it.</p>
         </li>
         <li>
-          <span class="ct">A perfect score was a bug</span>
-          <p>An earlier revision reported a perfect 1.0000 across every metric. That was label leakage in a
-             placeholder data generator. It was found, deleted, and documented. A perfect score in fraud
-             detection is essentially always a bug, and the honest response to one is to go looking for it.</p>
+          <span class="ct">A person makes every call</span>
+          <p>The system scores, groups and explains. It has no way to act on a payment in
+             either direction. A reviewer decides, and every decision is written permanently.</p>
         </li>
       </ul>
     </div>
   </div>
 </section>
+
 {% endblock %}

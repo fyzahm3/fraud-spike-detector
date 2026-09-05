@@ -124,11 +124,11 @@ HELP_TOPICS: dict[str, dict[str, str]] = {
     "auc_pr": {
         "title": "Why AUC-PR, not accuracy",
         "body": (
-            "Fraud is rare: 3,083 of the 88,581 transactions in the held-out test "
-            "split are fraudulent, about 3.5%. A model that calls every single "
-            "transaction legitimate is therefore 96.5% accurate while catching "
-            "nothing, so accuracy cannot distinguish a useful model from a useless "
-            "one here. AUC-PR summarises the precision/recall trade-off across "
+            "Fraud is rare \u2014 roughly one transaction in thirty in the held-out "
+            "split. A model that calls every single transaction legitimate is "
+            "therefore right about 96% of the time while catching nothing, so "
+            "accuracy cannot distinguish a useful model from a useless one here. "
+            "AUC-PR summarises the precision/recall trade-off across "
             "every possible threshold and uses the rare class as its reference "
             "point, so it moves when the model actually gets better at the job. "
             "AUC-ROC is reported alongside it, but on data this imbalanced ROC "
@@ -141,7 +141,7 @@ HELP_TOPICS: dict[str, dict[str, str]] = {
         "body": (
             "Currency caught for every unit of legitimate currency disrupted, "
             "measured on the held-out test split. Precision and recall count "
-            "transactions and treat a 5 payment and a 5,000 payment as equal "
+            "transactions and treat a tiny payment and a large one as equal "
             "events; this metric weighs them by the amount actually at stake, "
             "which is closer to what the outcome is worth. Above 1.0 the flagged "
             "set carries more fraudulent value than legitimate value. The "
@@ -338,14 +338,13 @@ TOUR_STEPS: list[dict[str, str]] = [
     {
         "page": "home",
         "target": ".claims",
-        "title": "What it deliberately does not claim",
+        "title": "What this is",
         "body": (
-            "Stated on the front page rather than in a footnote. US card data, "
-            "not UPI. Batch throughput, not a latency guarantee. No action path "
-            "of any kind. And an earlier revision that reported a perfect 1.0000 "
-            "\u2014 which was label leakage in a placeholder generator, found, "
-            "deleted and documented. A perfect score in fraud detection is almost "
-            "always a bug."
+            "Real card payments, a model trained on them, and a review queue a "
+            "person actually works. The system scores, groups and explains; it "
+            "has no way to act on a payment in either direction, and a reviewer "
+            "makes every call. Every figure shown is read from a file this "
+            "project produced, never typed into the page."
         ),
     },
     # --- Evidence -----------------------------------------------------
@@ -354,8 +353,8 @@ TOUR_STEPS: list[dict[str, str]] = [
         "target": "#split-section, .table-wrap",
         "title": "Start with the data and how it was split",
         "body": (
-            "590,540 real anonymised card transactions from the IEEE-CIS public "
-            "dataset, split chronologically \u2014 the earliest 70% to train, the "
+            "Real anonymised card transactions from the IEEE-CIS public dataset, "
+            "split chronologically \u2014 the earliest 70% to train, the "
             "next 15% to tune, the final 15% held out. Never a random shuffle: "
             "that would let the model learn from transactions that happened after "
             "the ones it is scored on, which no deployed system can do. Each split "

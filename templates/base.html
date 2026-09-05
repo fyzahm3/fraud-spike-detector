@@ -8,6 +8,9 @@
     <meta name="description" content="{% block description %}Fraud spike detection that reports what a caught unit of fraud costs in disrupted legitimate spending, and hands every decision to a human reviewer.{% endblock %}">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='img/logo.svg') }}">
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='img/logo.svg') }}">
+    <meta name="theme-color" content="#012652">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/site.css') }}">
 </head>
 <body data-page="{{ active }}">
@@ -15,7 +18,11 @@
 
     <header class="nav-head" id="nav-head">
         <nav class="nav" aria-label="Primary">
-            <a class="nav-brand" href="{{ url_for('index') }}">Fraud&nbsp;spike&nbsp;<span>detector</span></a>
+            <a class="nav-brand" href="{{ url_for('index') }}">
+                <img class="nav-mark" src="{{ url_for('static', filename='img/logo.svg') }}"
+                     alt="" width="26" height="26">
+                <span class="nav-wordmark">Fraud&nbsp;spike&nbsp;<span>detector</span></span>
+            </a>
             <div class="nav-links">
                 <a class="nav-link" href="{{ url_for('index') }}"
                    {% if active == 'home' %}aria-current="page"{% endif %}>Overview</a>

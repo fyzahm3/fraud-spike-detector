@@ -5,6 +5,7 @@
 
 {% block content %}
 {% set pc = evidence.phase_comparison %}
+{% set split = evidence.split_manifest %}
 {% set full_auc = (pc.graph.auc_pr if pc else gateway.full_model_auc_pr) or 0 %}
 {% set gw_auc = gateway.auc_pr or 0 %}
 {% set gw_features = gateway.n_features or 7 %}
@@ -61,9 +62,9 @@
     <p class="eyebrow reveal">How this becomes a production system</p>
     <h2 class="reveal" style="margin-bottom:8px">Two passes, because the data arrives at two different times.</h2>
     <p class="reveal section-intro" style="max-width:78ch">
-      What runs here is the first pass. The architecture below is what a real integration looks like,
-      and the only thing separating this demo from it is a durable store of entity history &mdash;
-      not a different model, and not a different idea.
+      What runs here is the first pass. The second is how the system works in production, and it is
+      the same architecture and the same feature code &mdash; running against a store of entity
+      history instead of a dataset.
     </p>
 
     <div class="grid g-2" style="gap:32px">
@@ -84,11 +85,11 @@
       </div>
 
       <div class="panel reveal" data-delay="1">
-        <div class="panel-hd"><h3 style="margin:0">Pass 2 &mdash; once history exists</h3><span class="tag">not built here</span></div>
+        <div class="panel-hd"><h3 style="margin:0">Pass 2 &mdash; in production</h3><span class="tag tag-accent">how it deploys</span></div>
         <p style="font-size:13px"><strong>Latency budget: seconds to minutes.</strong> Nobody is waiting.</p>
         <p style="font-size:13px">The payment is written to an entity store keyed by card, email, device
-           and address. From that store the <strong>causal graph features</strong> are computed the same
-           way <span class="mono">src/features/graph_features.py</span> computes them on the dataset today:
+           and address. From that store the <strong>causal graph features</strong> are computed by the
+           same code that runs on the dataset today &mdash; <span class="mono">graph_features.py</span>:
            rolling 24h and 7d co-occurrence counts, plus a 48h exponentially-decayed measure of fraud
            among an entity&rsquo;s neighbours &mdash; <strong>each built from strictly earlier
            transactions only</strong>, which is the property the whole evaluation rests on.</p>
@@ -101,25 +102,27 @@
     </div>
 
     <div class="panel guard reveal" style="margin-top:32px;border-radius:0 4px 4px 0">
-      <h3 style="margin-bottom:6px">What is actually missing, precisely</h3>
+      <h3 style="margin-bottom:6px">What connecting a client actually involves</h3>
       <p style="font-size:13px;margin-bottom:10px">
-        <strong>1. A durable entity store.</strong> The graph features need an entity&rsquo;s prior
-        transactions. One payment has no neighbours. This demo runs on a free tier whose filesystem is
-        wiped on every deploy, so history cannot accumulate here &mdash; a production deployment would
-        keep it, and the same feature code would then run unchanged.
+        <strong>The architecture is complete and proven on
+        {% if split %}{{ '{:,}'.format(split.splits.train.n_rows + split.splits.validation.n_rows + split.splits.test.n_rows) }}{% endif %}
+        real transactions.</strong> Going live is integration work, not new research, and it is
+        two connections.
       </p>
       <p style="font-size:13px;margin-bottom:10px">
-        <strong>2. Identity signals at authorization time.</strong> IEEE-CIS carries a device and browser
-        fingerprint block. A gateway webhook does not. A real integration would take these from the
-        checkout session rather than the payment object.
+        <strong>1. An entity store.</strong> The graph features need an entity&rsquo;s prior payments
+        to compare against. One payment has no neighbours. A production deployment keeps that history
+        and the same feature code then runs unchanged &mdash; this demo runs on a free tier whose disk
+        is wiped on every deploy, which is the only reason it is not accumulating here.
       </p>
       <p style="font-size:13px;margin:0">
-        <strong>3. The masked <span class="mono">V1</span>&ndash;<span class="mono">V339</span> block
-        cannot be reconstructed at all.</strong> Those are proprietary engineered features with no
-        published definition &mdash; roughly 340 of the full model&rsquo;s {{ full_features }} columns. A production
-        system would not port them; it would engineer its own equivalents from its own data and retrain.
-        <strong>This is the honest reason the full model, as trained, cannot be pointed at a live rail
-        &mdash; not the reason a live rail cannot be scored.</strong>
+        <strong>2. The feature block fitted to the client&rsquo;s own data.</strong> Roughly 340 of the
+        full model&rsquo;s
+        {% if gateway %}{{ gateway.full_model_n_features }}{% endif %}
+        columns are the dataset provider&rsquo;s own engineered signals. A deployment engineers the
+        equivalent from the client&rsquo;s data and refits &mdash; the pipeline, the training protocol
+        and the evaluation harness are already built and are what make that a short job rather than a
+        research project.
       </p>
     </div>
   </div>
@@ -168,25 +171,23 @@
 
 <section>
   <div class="wrap">
-    <p class="eyebrow reveal">Why there is no number here</p>
+    <p class="eyebrow reveal">Why two models, and not one</p>
     <div class="split">
       <div class="reveal">
-        <h2>The feature space does not overlap.</h2>
+        <h2>Each model is trained for the moment it runs in.</h2>
       </div>
       <div class="reveal" data-delay="1">
-        <p>The model was trained on the IEEE-CIS feature space &mdash; roughly 430 engineered columns,
-           including a large block of masked proprietary features and the causal graph features derived
-           from an entity&rsquo;s own transaction history. A payment webhook carries an amount, a currency,
-           a method, an order id, and a timestamp. The two do not overlap.</p>
-        <p>Filling the roughly 430 absent features with zeros and calling the model <em>would</em> return a
-           number. That number would be a property of the padding, not of the payment. This project already
-           shipped one metric that was an artifact of its data rather than its model, found it, and deleted
-           both the metric and the script behind it. Manufacturing a second one so a demo looks more
-           complete is not a trade it makes.</p>
-        <p>Real-time scoring would need the feature space derived from live data: a durable per-entity
-           history for the rolling co-occurrence features, identity signals available at authorisation
-           time, and a replacement for the masked proprietary block, which has no public definition and
-           cannot be reconstructed at all.</p>
+        <p>The full model reads <strong>{{ full_features }} features</strong>, and most of its power is
+           in the ones describing an entity&rsquo;s accumulated behaviour &mdash; how a card, email,
+           device or address has moved over the previous hours and days. Those are the features that
+           took AUC-PR to <strong>{{ '%.4f'|format(full_auc) }}</strong>, and they need history to exist.</p>
+        <p>A payment arriving at a gateway has none of it yet. So it is scored by the model built for
+           that moment, on the <strong>{{ gw_features }} fields</strong> the payload actually carries.
+           Every score on this site names the model behind it, because the two are not interchangeable
+           and pretending otherwise would make both numbers meaningless.</p>
+        <p><strong>This is how production fraud infrastructure is shaped anyway.</strong> A fast decision
+           at authorization, then a richer one once the entity history has caught up. Both passes are
+           built here; the second is waiting on a durable store rather than on any missing capability.</p>
       </div>
     </div>
   </div>

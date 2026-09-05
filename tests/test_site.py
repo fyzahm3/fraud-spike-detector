@@ -137,6 +137,25 @@ def test_no_metric_is_hard_coded_into_a_template():
         assert not found, f"hard-coded metric literal {found} in {path}"
 
 
+def test_static_prose_carries_no_typed_in_metrics():
+    """Tour and help copy explain the method; they never state a result.
+
+    A figure typed into prose is one that cannot be re-derived and will not move
+    when the model is retrained. The pages these steps point at already show the
+    real numbers, read from committed artifacts at request time.
+    """
+    import re
+    prose = [s["body"] + " " + s["title"] for s in app_module.TOUR_STEPS]
+    prose += [t["body"] + " " + t["title"] for t in app_module.HELP_TOPICS.values()]
+
+    # A grouped count (590,540) or a four-decimal score (0.6732) is a result.
+    grouped = re.compile(r"\b\d{1,3}(?:,\d{3})+\b")
+    four_dp = re.compile(r"(?<![\w.])\d\.\d{4}(?![\w])")
+    for text in prose:
+        assert not grouped.findall(text), f"typed-in count: {grouped.findall(text)}"
+        assert not four_dp.findall(text), f"typed-in score: {four_dp.findall(text)}"
+
+
 def test_metrics_page_degrades_rather_than_inventing_or_crashing(client, tmp_path, monkeypatch):
     """A missing artifact is stated plainly; it is never filled in from memory."""
     monkeypatch.setattr(app_module, "RESULTS_DIR", tmp_path)
@@ -266,8 +285,13 @@ def test_landing_page_does_not_imply_live_real_time_scoring(client):
                    "scores every payment as it happens"):
         assert phrase not in lowered, f"landing copy implies {phrase!r}"
 
-    # And it states the limitation positively somewhere on the page.
-    assert "unscored" in lowered
+    # The landing page may say live payments are scored — they are, by the
+    # gateway model — but it must name which model, because the two have very
+    # different measured performance and only one of them saw 443 features.
+    assert "gateway model" in lowered, (
+        "the page claims live scoring without saying which model does it"
+    )
+    assert "full model" in lowered
 
 
 def test_india_market_honesty_survives_on_the_site(client):

@@ -847,3 +847,9 @@ section.tinted { background: var(--canvas); }
     .stat-value { font-size: 26px; }
     .nav-links { gap: var(--s3); }
 }
+
+/* --- brand mark ----------------------------------------------------------- */
+.nav-brand { display: inline-flex; align-items: center; gap: var(--s3); }
+.nav-mark { display: block; width: 26px; height: 26px; border-radius: 6px; flex: 0 0 auto; }
+.nav-wordmark { display: inline-block; }
+@media (max-width: 420px) { .nav-mark { width: 22px; height: 22px; } }
