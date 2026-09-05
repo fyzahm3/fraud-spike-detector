@@ -277,6 +277,39 @@ HELP_TOPICS: dict[str, dict[str, str]] = {
             "rather than filled."
         ),
     },
+    "gateway_model": {
+        "title": "Gateway model vs. full model",
+        "body": (
+            "Two models, trained on the same dataset and the same chronological "
+            "split, differing only in which columns they are allowed to see. The "
+            "full model reads everything the pipeline can build, including twelve "
+            "causal graph features describing an entity's accumulated history — "
+            "that history is most of its predictive power. The gateway model is "
+            "restricted to the seven fields a payment webhook actually carries at "
+            "the instant of authorization: amount, hour, weekday, card network, "
+            "card type, email domain, issuing country. It scores far lower on the "
+            "same held-out split, and that gap is the deliverable, not a defect — "
+            "it is a measurement of what an entity's history is worth in AUC-PR. "
+            "A live payment on the Live page is scored only by the gateway model; "
+            "the two scores are never shown under one label, because they answer "
+            "different questions on different feature spaces."
+        ),
+    },
+    "audit_log": {
+        "title": "Why the audit log is append-only",
+        "body": (
+            "Every recorded decision writes exactly one new row to `audit_log`; "
+            "existing rows are never edited or deleted, including when a reviewer "
+            "changes their mind — a correction is a second row, not a rewrite "
+            "of the first. `ReviewQueue`'s public interface is fixed at four "
+            "methods (`enqueue`, `list_pending`, `resolve`, `get_audit_log`), and "
+            "an automated scan of the source fails the build if a blocking or "
+            "fund-holding action ever appears beside them. The result is a record "
+            "that shows who decided what and when, and that cannot be quietly "
+            "rewritten after the fact — the property an audit trail exists to "
+            "provide."
+        ),
+    },
 }
 
 # ---------------------------------------------------------------------------
@@ -579,6 +612,41 @@ def _require_basic_auth() -> Response | None:
     )
 
 _GATEWAY_CONTEXT: dict = {}
+_MODEL_STATUS: dict = {}
+
+
+def model_status_context() -> dict:
+    """What the sidebar's status line states: the model actually deployed.
+
+    Read once from the committed graph model's own metadata, never typed in,
+    so the figure moves if the artifact is ever retrained and recommitted.
+    """
+    if _MODEL_STATUS:
+        return _MODEL_STATUS
+    context: dict = {"available": False}
+    try:
+        with open("artifacts/graph_meta.json", encoding="utf-8") as handle:
+            meta = json.load(handle)
+        context["available"] = True
+        context["variant"] = meta.get("variant", "graph")
+        context["n_features"] = meta.get("n_features")
+        context["threshold"] = meta.get("threshold")
+    except (OSError, ValueError):
+        pass
+    _MODEL_STATUS.update(context)
+    return _MODEL_STATUS
+
+
+def nav_pending_count() -> int | None:
+    """Live count for the Queue badge in the sidebar, or None if unreachable.
+
+    A real number from the database on every request — the same signal an
+    analyst would use to judge whether a shift is starting light or heavy.
+    """
+    try:
+        return len(ReviewQueue(db_path=DB_PATH).list_pending())
+    except Exception:
+        return None
 
 
 def gateway_context() -> dict:
@@ -667,6 +735,8 @@ EVIDENCE_FILES = {
     "split_manifest": "split_manifest.json",
     "pipeline_run": "pipeline_run_summary.json",
     "gateway": "gateway_metrics.json",
+    "score_distribution": "score_distribution.json",
+    "demo_seed_provenance": "demo_seed_provenance.json",
 }
 
 
@@ -703,6 +773,8 @@ def _render_page(template: str, **context):
         help_topics=HELP_TOPICS,
         tour_steps=tour_steps_for(context.get("active", "")),
         tour_total=len(TOUR_STEPS),
+        nav_pending_count=nav_pending_count(),
+        model_status=model_status_context(),
         **context,
     ))
     response.set_cookie(
@@ -720,6 +792,16 @@ def _render_page(template: str, **context):
 def index():
     """Public landing page: what this is, and the evidence behind the claim."""
     return _render_page("landing.html", evidence=load_evidence(), active="home")
+
+
+@app.route("/overview")
+def overview_page():
+    """Dashboard home: the console's own KPI strip, score histogram, and mix."""
+    return _render_page(
+        "overview.html",
+        evidence=load_evidence(),
+        active="overview",
+    )
 
 
 @app.route("/metrics")

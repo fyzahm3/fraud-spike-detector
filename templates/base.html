@@ -25,13 +25,10 @@
             </a>
             <div class="nav-links">
                 <a class="nav-link" href="{{ url_for('index') }}"
-                   {% if active == 'home' %}aria-current="page"{% endif %}>Overview</a>
+                   {% if active == 'home' %}aria-current="page"{% endif %}>Home</a>
                 <a class="nav-link" href="{{ url_for('metrics_page') }}"
                    {% if active == 'metrics' %}aria-current="page"{% endif %}>Metrics</a>
-                <a class="nav-link" href="{{ url_for('demo_page') }}"
-                   {% if active == 'demo' %}aria-current="page"{% endif %}>Demo</a>
-                <a class="nav-link" href="{{ url_for('live_page') }}"
-                   {% if active == 'live' %}aria-current="page"{% endif %}>Live</a>
+                <a class="nav-link" href="{{ url_for('overview_page') }}">Console</a>
                 <button class="nav-tour" type="button" id="tour-start">
                     <span aria-hidden="true">&#9654;</span> Guided tour
                 </button>

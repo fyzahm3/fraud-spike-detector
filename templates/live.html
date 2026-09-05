@@ -1,206 +1,155 @@
-{% extends "base.html" %}
+{% extends "app_shell.html" %}
 {% import "_help.html" as h with context %}
-{% block title %}Live ingestion — Fraud spike detector{% endblock %}
-{% block description %}A real Razorpay test-mode payment ingested into the review queue — deliberately unscored, and labelled as such.{% endblock %}
+{% block title %}Live — Fraud spike detector{% endblock %}
+{% block description %}A real Razorpay test-mode payment ingested into the review queue — deliberately unscored by the full model, and labelled as such.{% endblock %}
 
-{% block content %}
 {% set pc = evidence.phase_comparison %}
 {% set split = evidence.split_manifest %}
 {% set full_auc = (pc.graph.auc_pr if pc else gateway.full_model_auc_pr) or 0 %}
 {% set gw_auc = gateway.auc_pr or 0 %}
 {% set gw_features = gateway.n_features or 7 %}
 {% set full_features = gateway.full_model_n_features or 443 %}
-<section>
-  <div class="wrap">
-    <p class="eyebrow reveal">Live ingestion</p>
-    <div class="split">
-      <div class="reveal">
-        <h1>This payment was never in the training data. It is scored anyway &mdash; by the model
-            that only knows what a payment rail can tell it.</h1>
-        <p><strong>Everything else on this site is measured on a held-out slice of a dataset.</strong>
-           This page is not. A real payment is created against a real payment gateway, a real webhook
-           comes back signed, and the item below is that payment &mdash; scored at the instant of
-           authorization, by a model trained for exactly that moment.</p>
-        <div class="btn-row">
-          <button class="btn btn-primary" type="button" id="btn-live-trigger">Trigger live transaction</button>
-        </div>
-        <p class="live-trigger-status" id="live-trigger-status" role="status" aria-live="polite"></p>
-        <p class="src"><strong>Test mode only.</strong> One &#8377;1 order against the sandbox. A key
-           that is not a test-mode key is refused before any network call is made, so this control
-           cannot reach a live payment environment.</p>
-      </div>
 
-      <div class="reveal" data-delay="1">
-        <div class="panel panel-tinted guard">
-          <h3 style="margin-bottom:8px">The distinction that matters</h3>
-          <p style="font-size:13px;margin-bottom:12px">
-            <strong>A fraud model is only as good as the history behind the transaction.</strong>
-            The full model reaches <strong>AUC-PR {{ '%.4f'|format(full_auc) }}</strong> because it can see that a card has
-            appeared on four devices this week, that an email domain clusters with three charged-back
-            accounts, that an address has been reused at 3&nbsp;a.m. twice.
-          </p>
-          <p style="font-size:13px;margin-bottom:12px">
-            <strong>None of that exists at the moment a payment is authorized.</strong> The webhook
-            carries an amount, a card network, a card type, an email domain and a timestamp. {{ gw_features }}
-            usable fields against {{ full_features }}.
-          </p>
-          <p style="font-size:13px;margin:0">
-            So this payment is scored by a <strong>gateway model</strong> &mdash; same dataset, same
-            chronological split, same protocol, restricted to those {{ gw_features }} fields. It reaches
-            <strong>AUC-PR {{ '%.4f'|format(gw_auc) }}</strong>. <strong>That gap is not a flaw in the demo; it is the
-            measurement.</strong> It is what an entity&rsquo;s accumulated history is worth, stated
-            as a number.
-          </p>
-        </div>
+{% block view_title %}Live{% endblock %}
+{% block view_status %}Test mode only &middot; one order, sandbox only{% endblock %}
+
+{% block content %}
+<div class="panel-row">
+  <section class="panel shell-panel-primary">
+    <div class="panel-hd">
+      <div>
+        <h2>Trigger a real payment</h2>
+        <p class="panel-sub">This item is not from a dataset. A real order is created against a real payment
+          gateway in test mode, and the signed webhook that comes back is verified before anything is parsed.</p>
       </div>
     </div>
-  </div>
-</section>
+    <p><strong>This payment was never in the training data.</strong> It is scored anyway &mdash; by the model
+       that only knows what a payment rail can tell it at the instant of authorization.</p>
+    <div class="btn-row">
+      <button class="btn btn-primary" type="button" id="btn-live-trigger">Trigger live transaction</button>
+    </div>
+    <p class="live-trigger-status" id="live-trigger-status" role="status" aria-live="polite"></p>
+    <p class="src"><strong>Test mode only.</strong> One &#8377;1 order against the sandbox. A key that is not a
+       test-mode key is refused before any network call is made, so this control cannot reach a live payment
+       environment.</p>
+  </section>
 
-<section class="tinted">
-  <div class="wrap">
-    <p class="eyebrow reveal">How this becomes a production system</p>
-    <h2 class="reveal" style="margin-bottom:8px">Two passes, because the data arrives at two different times.</h2>
-    <p class="reveal section-intro" style="max-width:78ch">
-      What runs here is the first pass. The second is how the system works in production, and it is
-      the same architecture and the same feature code &mdash; running against a store of entity
-      history instead of a dataset.
+  <aside class="panel shell-panel-rail">
+    <div class="panel-hd">
+      <div>
+        <h2>Why this score is different {{ h.help('gateway_model') }}</h2>
+      </div>
+    </div>
+    <p style="font-size:13px;margin-bottom:12px">
+      The full model reaches <strong>AUC-PR {{ '%.4f'|format(full_auc) }}</strong> because it can see an
+      entity's accumulated history &mdash; a card on four devices this week, an email clustering with
+      charged-back accounts. <strong>None of that exists at the instant a payment is authorized.</strong>
     </p>
+    <p style="font-size:13px;margin:0">
+      So this payment is scored by a <strong>gateway model</strong> restricted to the {{ gw_features }}
+      fields a webhook actually carries. It reaches <strong>AUC-PR {{ '%.4f'|format(gw_auc) }}</strong>.
+      That gap is the measurement: what an entity's history is worth, stated as a number.
+    </p>
+  </aside>
+</div>
 
-    <div class="grid g-2" style="gap:32px">
-      <div class="panel reveal">
-        <div class="panel-hd"><h3 style="margin:0">Pass 1 &mdash; at authorization</h3><span class="tag tag-accent">running now</span></div>
-        <p style="font-size:13px"><strong>Latency budget: milliseconds.</strong> The payment is waiting.</p>
-        <p style="font-size:13px">A client &mdash; Razorpay or any other gateway &mdash; posts a signed
-           webhook. The signature is verified over the raw bytes before anything is parsed. The payload
-           is projected onto the seven fields the gateway model was trained on: <span class="mono">amount</span>,
-           <span class="mono">hour</span>, <span class="mono">weekday</span>, <span class="mono">card.network</span>,
-           <span class="mono">card.type</span>, <span class="mono">email domain</span>,
-           <span class="mono">issuing country</span>.</p>
-        <p style="font-size:13px"><strong>A field the webhook did not send stays missing.</strong>
-           It is never defaulted to a plausible value to improve the score &mdash; XGBoost handles
-           missingness natively, and a filled-in value would be describing the fill, not the payment.</p>
-        <p style="font-size:13px;margin:0"><strong>Output:</strong> a real probability, and a
-           threshold decision. Good enough to triage; explicitly labelled as such.</p>
-      </div>
-
-      <div class="panel reveal" data-delay="1">
-        <div class="panel-hd"><h3 style="margin:0">Pass 2 &mdash; in production</h3><span class="tag tag-accent">how it deploys</span></div>
-        <p style="font-size:13px"><strong>Latency budget: seconds to minutes.</strong> Nobody is waiting.</p>
-        <p style="font-size:13px">The payment is written to an entity store keyed by card, email, device
-           and address. From that store the <strong>causal graph features</strong> are computed by the
-           same code that runs on the dataset today &mdash; <span class="mono">graph_features.py</span>:
-           rolling 24h and 7d co-occurrence counts, plus a 48h exponentially-decayed measure of fraud
-           among an entity&rsquo;s neighbours &mdash; <strong>each built from strictly earlier
-           transactions only</strong>, which is the property the whole evaluation rests on.</p>
-        <p style="font-size:13px">With that history in hand the payment is re-scored by the
-           <strong>full model</strong>, grouped into spike events per entity, and written to the review
-           queue with a brief.</p>
-        <p style="font-size:13px;margin:0"><strong>Output:</strong> the {{ '%.4f'|format(full_auc) }}-grade judgement &mdash;
-           minutes late, and worth the wait.</p>
-      </div>
+<section class="panel shell-panel-secondary">
+  <div class="panel-hd">
+    <div>
+      <h2>Two passes, because the data arrives at two different times</h2>
+      <p class="panel-sub">What runs here is the first pass. The second is the same architecture and the
+        same feature code, running against a store of entity history instead of a dataset.</p>
     </div>
+  </div>
+  <div class="grid g-2" style="gap:32px">
+    <div class="panel panel-tinted">
+      <div class="panel-hd"><h3 style="margin:0">Pass 1 &mdash; at authorization</h3><span class="tag tag-accent">running now</span></div>
+      <p style="font-size:13px"><strong>Latency budget: milliseconds.</strong> The payment is waiting.</p>
+      <p style="font-size:13px">A client posts a signed webhook. The signature is verified over the raw bytes
+         before anything is parsed. The payload is projected onto the seven fields the gateway model was
+         trained on: <span class="mono">amount</span>, <span class="mono">hour</span>,
+         <span class="mono">weekday</span>, <span class="mono">card.network</span>,
+         <span class="mono">card.type</span>, <span class="mono">email domain</span>,
+         <span class="mono">issuing country</span>.</p>
+      <p style="font-size:13px;margin:0"><strong>A field the webhook did not send stays missing</strong> &mdash;
+         never defaulted to a plausible value. XGBoost handles missingness natively; a filled-in value would
+         describe the fill, not the payment.</p>
+    </div>
+    <div class="panel panel-tinted">
+      <div class="panel-hd"><h3 style="margin:0">Pass 2 &mdash; in production</h3><span class="tag tag-accent">how it deploys</span></div>
+      <p style="font-size:13px"><strong>Latency budget: seconds to minutes.</strong> Nobody is waiting.</p>
+      <p style="font-size:13px">The payment is written to an entity store keyed by card, email, device and
+         address. From that store the <strong>causal graph features</strong> {{ h.help('graph_features', '-live') }}
+         are computed by the same <span class="mono">graph_features.py</span> that runs on the dataset today,
+         each built from strictly earlier transactions only.</p>
+      <p style="font-size:13px;margin:0">With that history in hand the payment is re-scored by the
+         <strong>full model</strong>, grouped into spike events, and written to the review queue with a
+         brief &mdash; the {{ '%.4f'|format(full_auc) }}-grade judgement, minutes late.</p>
+    </div>
+  </div>
 
-    <div class="panel guard reveal" style="margin-top:32px;border-radius:0 4px 4px 0">
-      <h3 style="margin-bottom:6px">What connecting a client actually involves</h3>
-      <p style="font-size:13px;margin-bottom:10px">
-        <strong>The architecture is complete and proven on
-        {% if split %}{{ '{:,}'.format(split.splits.train.n_rows + split.splits.validation.n_rows + split.splits.test.n_rows) }}{% endif %}
-        real transactions.</strong> Going live is integration work, not new research, and it is
-        two connections.
-      </p>
-      <p style="font-size:13px;margin-bottom:10px">
-        <strong>1. An entity store.</strong> The graph features need an entity&rsquo;s prior payments
-        to compare against. One payment has no neighbours. A production deployment keeps that history
-        and the same feature code then runs unchanged &mdash; this demo runs on a free tier whose disk
-        is wiped on every deploy, which is the only reason it is not accumulating here.
-      </p>
-      <p style="font-size:13px;margin:0">
-        <strong>2. The feature block fitted to the client&rsquo;s own data.</strong> Roughly 340 of the
-        full model&rsquo;s
-        {% if gateway %}{{ gateway.full_model_n_features }}{% endif %}
-        columns are the dataset provider&rsquo;s own engineered signals. A deployment engineers the
-        equivalent from the client&rsquo;s data and refits &mdash; the pipeline, the training protocol
-        and the evaluation harness are already built and are what make that a short job rather than a
-        research project.
-      </p>
+  <div class="panel guard" style="margin-top:32px">
+    <h3 style="margin-bottom:6px">What connecting a client actually involves</h3>
+    <p style="font-size:13px;margin-bottom:10px">
+      <strong>The architecture is complete and proven on
+      {% if split %}{{ '{:,}'.format(split.splits.train.n_rows + split.splits.validation.n_rows + split.splits.test.n_rows) }}{% endif %}
+      real transactions.</strong> Going live is integration work, not new research: an entity store so the
+      graph features have a past to compare against (this demo runs on a free tier whose disk is wiped on
+      every deploy, which is the only reason it is not accumulating here), and the feature block refitted to
+      the client's own data &mdash; roughly 340 of the full model's {{ full_features }} columns are the
+      dataset provider's own engineered signals.
+    </p>
+  </div>
+</section>
+
+<section class="panel shell-panel-secondary">
+  <div class="panel-hd">
+    <div>
+      <h2>What happens, in order</h2>
+    </div>
+  </div>
+  <div class="flow">
+    <div class="flow-col">
+      <p class="flow-index">ORDER</p>
+      <h3>One order is created</h3>
+      <p style="font-size:14px">A single call to the orders endpoint, for a fixed one-rupee amount that is
+         not caller-supplied. There is no path to a refund, a capture, a payout, or a subscription, and a
+         test scans for one on every run.</p>
+      <div class="flow-io"><b>Out:</b> order id</div>
+    </div>
+    <div class="flow-arrow" aria-hidden="true">
+      <svg width="28" height="12" viewBox="0 0 28 12" fill="none"><path d="M0 6h25M20 1l5 5-5 5" stroke="currentColor" stroke-width="1.5"/></svg>
+    </div>
+    <div class="flow-col">
+      <p class="flow-index">VERIFY</p>
+      <h3>Signature checked before anything is read</h3>
+      <p style="font-size:14px">The webhook body is HMAC-SHA256 verified against the signing secret, over
+         the raw bytes exactly as received. A payload that fails is rejected with a 400 and never parsed,
+         stored, or logged. A repeated event id is recognised as a retry and ignored.</p>
+      <div class="flow-io"><b>In:</b> signed webhook &nbsp;&middot;&nbsp; <b>Out:</b> verified payload</div>
+    </div>
+    <div class="flow-arrow" aria-hidden="true">
+      <svg width="28" height="12" viewBox="0 0 28 12" fill="none"><path d="M0 6h25M20 1l5 5-5 5" stroke="currentColor" stroke-width="1.5"/></svg>
+    </div>
+    <div class="flow-col">
+      <p class="flow-index">QUEUE</p>
+      <h3>Queued as explicitly unscored</h3>
+      <p style="font-size:14px">The item enters the same review queue as everything else, marked with its
+         own type, served with a null score and an explicit unscored flag, and rendered on its own branch
+         &mdash; a viewer must not be able to mistake it for a scored item.</p>
+      <div class="flow-io"><b>Out:</b> unscored review item</div>
     </div>
   </div>
 </section>
 
-<section class="tinted">
-  <div class="wrap">
-    <p class="eyebrow reveal">What happens, in order</p>
-    <div class="flow">
-      <div class="flow-col reveal">
-        <p class="flow-index">01 &mdash; ORDER</p>
-        <h3>One order is created</h3>
-        <p style="font-size:14px">A single call to the orders endpoint, for a fixed one-rupee amount that
-           is not caller-supplied. This is the only outbound payment-rail call the application can make:
-           there is no path to a refund, a capture, a payout, or a subscription, and a test scans for one
-           on every run.</p>
-        <div class="flow-io"><b>Out:</b> order id</div>
-      </div>
-      <div class="flow-arrow" aria-hidden="true">
-        <svg width="28" height="12" viewBox="0 0 28 12" fill="none"><path d="M0 6h25M20 1l5 5-5 5" stroke="currentColor" stroke-width="1.5"/></svg>
-      </div>
-      <div class="flow-col reveal" data-delay="1">
-        <p class="flow-index">02 &mdash; VERIFY</p>
-        <h3>Signature checked before anything is read</h3>
-        <p style="font-size:14px">The webhook body is HMAC-SHA256 verified against the signing secret,
-           over the raw bytes exactly as received. A payload that fails is rejected with a 400 and is never
-           parsed, stored, or logged. A repeated event id is recognised as a retry and ignored rather than
-           queued twice.</p>
-        <div class="flow-io"><b>In:</b> signed webhook &nbsp;&middot;&nbsp; <b>Out:</b> verified payload</div>
-      </div>
-      <div class="flow-arrow" aria-hidden="true">
-        <svg width="28" height="12" viewBox="0 0 28 12" fill="none"><path d="M0 6h25M20 1l5 5-5 5" stroke="currentColor" stroke-width="1.5"/></svg>
-      </div>
-      <div class="flow-col reveal" data-delay="2">
-        <p class="flow-index">03 &mdash; QUEUE</p>
-        <h3>Queued as explicitly unscored</h3>
-        <p style="font-size:14px">The item enters the same review queue as everything else, marked with
-           its own type, served with a null score and an explicit unscored flag, and rendered on its own
-           branch &mdash; different wording, different labels, dashed border. Not a colour difference: a
-           viewer must not be able to mistake it for a scored item.</p>
-        <div class="flow-io"><b>Out:</b> unscored review item</div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<section>
-  <div class="wrap">
-    <p class="eyebrow reveal">Why two models, and not one</p>
-    <div class="split">
-      <div class="reveal">
-        <h2>Each model is trained for the moment it runs in.</h2>
-      </div>
-      <div class="reveal" data-delay="1">
-        <p>The full model reads <strong>{{ full_features }} features</strong>, and most of its power is
-           in the ones describing an entity&rsquo;s accumulated behaviour &mdash; how a card, email,
-           device or address has moved over the previous hours and days. Those are the features that
-           took AUC-PR to <strong>{{ '%.4f'|format(full_auc) }}</strong>, and they need history to exist.</p>
-        <p>A payment arriving at a gateway has none of it yet. So it is scored by the model built for
-           that moment, on the <strong>{{ gw_features }} fields</strong> the payload actually carries.
-           Every score on this site names the model behind it, because the two are not interchangeable
-           and pretending otherwise would make both numbers meaningless.</p>
-        <p><strong>This is how production fraud infrastructure is shaped anyway.</strong> A fast decision
-           at authorization, then a richer one once the entity history has caught up. Both passes are
-           built here; the second is waiting on a durable store rather than on any missing capability.</p>
-      </div>
-    </div>
-  </div>
-</section>
-
-<section class="tinted">
-  <div class="wrap">
-    <div class="section-hd reveal">
+<section class="panel shell-panel-secondary" id="live-items-section">
+  <div class="panel-hd">
+    <div>
       <h2>Ingested so far</h2>
-      <p>Live items currently in this instance&rsquo;s queue. Free hosting tiers reset the filesystem on
-         redeploy, so this list is expected to be empty on a fresh boot.</p>
+      <p class="panel-sub">Live items currently in this instance's queue. Free hosting tiers reset the
+        filesystem on redeploy, so this list is expected to be empty on a fresh boot.</p>
     </div>
-    <div id="live-items-container" aria-live="polite"></div>
   </div>
+  <div id="live-items-container" aria-live="polite"></div>
 </section>
 {% endblock %}

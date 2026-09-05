@@ -252,7 +252,7 @@ section.tinted { background: var(--canvas); }
 .panel { border: 1px solid var(--line); border-radius: var(--radius); background: var(--bg); padding: var(--s6); }
 .panel-tinted { background: var(--canvas); }
 .panel-hd { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s4); margin-bottom: var(--s4); padding-bottom: var(--s3); border-bottom: 1px solid var(--line); }
-.panel-hd h3, .panel-hd h4 { margin: 0; }
+.panel-hd h2, .panel-hd h3, .panel-hd h4 { margin: 0; font-size: 16px; }
 
 .claims { list-style: none; margin: 0; padding: 0; }
 .claims li { padding: var(--s4) 0; border-top: 1px solid var(--line); display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: var(--s6); }
@@ -260,7 +260,7 @@ section.tinted { background: var(--canvas); }
 .claims dt, .claims .ct { font-weight: 600; font-size: 13px; letter-spacing: 0.02em; }
 .claims p { margin: 0; font-size: 14px; color: var(--muted); max-width: 62ch; }
 
-.guard { border-left: 2px solid var(--accent); padding-left: var(--s4); }
+.guard { border-top: 2px solid var(--accent); }
 
 .table { width: 100%; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; }
 .table caption { text-align: left; font-size: 12px; color: var(--muted); padding-bottom: var(--s3); }
@@ -312,8 +312,10 @@ section.tinted { background: var(--canvas); }
 .reveal[data-delay="3"] { transition-delay: 210ms; }
 .reveal[data-delay="4"] { transition-delay: 280ms; }
 
-.js-motion .bar-fill { width: 0; transition: width var(--t-slow) var(--ease); }
-.js-motion .is-in .bar-fill, .js-motion .bar-fill.is-in { width: var(--w, 0); }
+/* The bar is laid out at its real, final width immediately — only its paint
+   animates. Animating `width` thrashes layout; a transform does not. */
+.js-motion .bar-fill { transform: scaleX(0); transform-origin: left; transition: transform var(--t-slow) var(--ease); }
+.js-motion .is-in .bar-fill, .js-motion .bar-fill.is-in { transform: scaleX(1); }
 
 .lift { transition: transform var(--t-base) var(--ease), box-shadow var(--t-base) var(--ease), border-color var(--t-base) var(--ease); }
 .lift:hover { transform: translateY(-2px); box-shadow: 0 10px 24px rgba(1, 38, 82, 0.08); border-color: var(--accent); }
@@ -330,13 +332,13 @@ section.tinted { background: var(--canvas); }
     scroll-behavior: auto !important;
   }
   .js-motion .reveal { opacity: 1; transform: none; }
-  .js-motion .bar-fill { width: var(--w, 0); }
+  .js-motion .bar-fill { transform: none; }
 }
 
 /* Printing, and any capture that does not scroll, must still get the page. */
 @media print {
   .js-motion .reveal { opacity: 1 !important; transform: none !important; }
-  .js-motion .bar-fill { width: var(--w, 0) !important; }
+  .js-motion .bar-fill { transform: none !important; }
   .nav-head { position: static; }
 }
 
@@ -501,8 +503,8 @@ section.tinted { background: var(--canvas); }
 .scorer-select:focus-visible { border-color: var(--accent); }
 .scorer-hint { margin: var(--s3) 0 0; font-size: 12px; color: var(--muted); max-width: 76ch; }
 
-.verdict { margin-top: var(--s6); border: 1px solid var(--line); border-left: 2px solid var(--accent); border-radius: var(--radius); background: var(--canvas); padding: var(--s6); }
-.verdict-wrong { border-left-color: var(--warn); }
+.verdict { margin-top: var(--s6); border: 1px solid var(--line); border-top: 2px solid var(--accent); border-radius: var(--radius); background: var(--canvas); padding: var(--s6); }
+.verdict-wrong { border-top-color: var(--warn); }
 .verdict-hd { display: flex; flex-wrap: wrap; gap: var(--s2); }
 .verdict-scoreblock { margin: var(--s4) 0; }
 .verdict-score { display: block; font-size: 46px; font-weight: 800; line-height: 1; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
@@ -559,7 +561,7 @@ section.tinted { background: var(--canvas); }
 
 .brief-resolving { opacity: 0.55; transition: opacity var(--t-base) var(--ease); }
 
-.brief-recorded { border-color: var(--good); border-left: 2px solid var(--good); }
+.brief-recorded { border-color: var(--good); border-top: 2px solid var(--good); }
 
 .recorded { padding: var(--s6); }
 .recorded-title { margin: 0 0 var(--s2); font-size: 15px; font-weight: 700; color: var(--good); }
@@ -583,7 +585,7 @@ section.tinted { background: var(--canvas); }
     gap: var(--s4);
     padding: var(--s3) var(--s4);
     border: 1px solid var(--ink);
-    border-left: 3px solid var(--accent);
+    border-top: 2px solid var(--accent);
     border-radius: var(--radius);
     background: var(--ink);
     color: #fff;
@@ -634,7 +636,7 @@ section.tinted { background: var(--canvas); }
     margin: 0 var(--s6) var(--s4);
     padding: var(--s4);
     border: 1px solid var(--line);
-    border-left: 2px solid var(--accent);
+    border-top: 2px solid var(--accent);
     border-radius: var(--radius);
     background: var(--canvas);
 }
@@ -865,3 +867,228 @@ section.tinted { background: var(--canvas); }
 .nav-mark { display: block; width: 26px; height: 26px; border-radius: 6px; flex: 0 0 auto; }
 .nav-wordmark { display: inline-block; }
 @media (max-width: 420px) { .nav-mark { width: 22px; height: 22px; } }
+
+/* ============================================================
+   15. The console — the operate surface.
+
+   Landing stays light Blade: a marketing surface. Everything a
+   reviewer actually works — Overview, Queue, Live, Metrics — is a
+   dark operational shell, entered from the landing page's own CTA.
+   Every component below is the same primitive as sections 1-14 (the
+   grid, the table, the panel, the tag, the bar) re-themed by
+   redefining tokens on body.app-shell; almost nothing here is a new
+   visual pattern; it is the existing system on a dark canvas, with a
+   tighter density suited to a full-shift working tool rather than a
+   page meant to be read once. See docs/DESIGN.md for the direction.
+   ============================================================ */
+
+/* The console keeps the same light Prussian/Dodger palette as the rest of
+   the site — every token below is inherited unchanged from :root. Only the
+   shell's own layout (grid, sidebar, panels) is new; the color system is
+   deliberately identical to the marketing pages so there is one visual
+   language, not two. */
+body.app-shell {
+  background: var(--bg);
+  min-height: 100vh;
+}
+
+body.app-shell section { border-bottom: 0; }
+
+/* --- shell grid: fixed sidebar, header + content column --- */
+.shell {
+  display: grid;
+  grid-template-columns: 248px minmax(0, 1fr);
+  min-height: 100vh;
+}
+
+.shell-topbar {
+  display: none;
+  align-items: center;
+  gap: var(--s3);
+  padding: var(--s3) var(--s4);
+  background: var(--canvas);
+  border-bottom: 1px solid var(--line);
+  position: sticky;
+  top: 0;
+  z-index: 45;
+  grid-column: 1 / -1;
+}
+.shell-topbar-brand { display: inline-flex; align-items: center; gap: var(--s2); color: var(--ink); font-weight: 700; font-size: 13px; text-decoration: none; }
+.shell-toggle {
+  appearance: none; border: 1px solid var(--line); background: var(--bg); border-radius: var(--radius);
+  width: 34px; height: 34px; display: inline-flex; align-items: center; justify-content: center;
+  cursor: pointer; flex: 0 0 auto;
+}
+.shell-toggle-bars, .shell-toggle-bars::before, .shell-toggle-bars::after {
+  display: block; width: 16px; height: 2px; background: var(--ink); border-radius: 1px;
+}
+.shell-toggle-bars { position: relative; }
+.shell-toggle-bars::before, .shell-toggle-bars::after { content: ""; position: absolute; left: 0; }
+.shell-toggle-bars::before { top: -5px; }
+.shell-toggle-bars::after { top: 5px; }
+
+.shell-backdrop { display: none; }
+
+/* --- sidebar --- */
+.shell-side {
+  grid-row: 1 / span 2;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s6);
+  padding: var(--s5, 20px) var(--s4);
+  background: var(--canvas);
+  border-right: 1px solid var(--line);
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+}
+.shell-brand { display: flex; align-items: center; gap: var(--s3); text-decoration: none; color: var(--ink); padding: 0 var(--s2); }
+.shell-brand-word { font-size: 13px; font-weight: 600; line-height: 1.3; }
+.shell-brand-word b { color: var(--accent-deep); font-weight: 800; }
+
+.shell-nav { display: flex; flex-direction: column; gap: 2px; }
+.shell-nav-link {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--s2);
+  padding: var(--s3) var(--s3) var(--s3) var(--s4);
+  border-left: 2px solid transparent;
+  border-radius: 0 var(--radius) var(--radius) 0;
+  color: var(--muted);
+  font-size: 13px; font-weight: 600;
+  text-decoration: none;
+  transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease);
+}
+.shell-nav-link:hover { color: var(--ink); background: var(--canvas-2); }
+.shell-nav-link[aria-current="page"] { color: var(--ink); background: var(--canvas-2); border-left-color: var(--accent); }
+.shell-nav-badge {
+  font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 999px;
+  background: var(--canvas-2); color: var(--muted);
+}
+.shell-nav-link[aria-current="page"] .shell-nav-badge,
+.shell-nav-link:hover .shell-nav-badge { color: var(--ink); }
+
+.shell-side-foot { margin-top: auto; display: flex; flex-direction: column; gap: var(--s2); padding: 0 var(--s2); }
+.shell-tour-btn {
+  appearance: none; border: 1px solid var(--line); background: var(--bg); color: var(--ink);
+  border-radius: var(--radius); padding: var(--s2) var(--s3); font: inherit; font-size: 12px; font-weight: 600;
+  cursor: pointer; text-align: left; display: inline-flex; align-items: center; gap: var(--s2);
+  transition: border-color var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
+}
+.shell-tour-btn:hover { border-color: var(--accent); color: var(--accent-deep); }
+.shell-side-link { font-size: 12px; color: var(--muted); text-decoration: none; padding: var(--s1) 0; }
+.shell-side-link:hover { color: var(--accent-deep); }
+.shell-disclosure {
+  font-size: 11px; line-height: 1.5; color: var(--muted); margin: var(--s2) 0 0;
+  padding-top: var(--s3); border-top: 1px solid var(--line); max-width: none;
+}
+.shell-disclosure strong { color: var(--ink); }
+
+.shell-status { display: flex; align-items: center; gap: var(--s2); font-size: 11px; color: var(--muted); padding-top: var(--s2); }
+.shell-status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--good); flex: 0 0 auto; box-shadow: 0 0 0 3px color-mix(in srgb, var(--good) 22%, transparent); }
+.shell-status-dot--off { background: var(--muted); box-shadow: none; }
+
+/* --- header + content column --- */
+.shell-main { display: flex; flex-direction: column; min-width: 0; }
+.shell-head {
+  display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--s4);
+  padding: var(--s5, 20px) var(--s6);
+  border-bottom: 1px solid var(--line);
+  position: sticky; top: 0; z-index: 20; background: var(--bg);
+}
+.shell-head h1 { font-size: 21px; margin: 0; letter-spacing: -0.01em; }
+.shell-head-status { margin: 0; font-size: 12px; color: var(--muted); text-align: right; }
+
+.shell-content { padding: var(--s6); display: flex; flex-direction: column; gap: var(--s6); flex: 1; }
+.shell-lede { margin: 0; font-size: 13px; color: var(--muted); max-width: 74ch; }
+
+/* --- kpi strip, panel grid: tight internals, generous separation --- */
+.shell-kpis.kpis { background: var(--canvas); }
+.shell-kpis .kpi { border-left-color: var(--line); }
+.shell-kpis .kpi-value { font-size: 28px; }
+
+.panel-row { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: var(--s6); align-items: start; }
+.shell-panel-rail { display: flex; flex-direction: column; gap: var(--s6); }
+.panel-sub { margin: 2px 0 0; font-size: 12px; color: var(--muted); }
+.shell-panel-primary .panel-hd, .shell-panel-rail .panel-hd, .shell-panel-secondary .panel-hd { margin-bottom: var(--s5, 20px); }
+
+/* --- confusion matrix --- */
+.confmat { display: grid; grid-template-columns: auto repeat(2, minmax(0, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; font-size: 12px; }
+.confmat > div { background: var(--canvas); padding: var(--s3); }
+.confmat .confmat-corner { background: var(--bg); }
+.confmat .confmat-label { color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; font-size: 10px; display: flex; align-items: center; }
+.confmat .confmat-value { text-align: right; }
+.confmat .confmat-value .num { display: block; font-size: 20px; font-weight: 800; letter-spacing: -0.02em; }
+.confmat .confmat-value .confmat-tag { display: block; margin-top: 2px; font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+.confmat .is-correct .num { color: var(--good); }
+.confmat .is-wrong .num { color: var(--bad); }
+
+/* --- score histogram --- */
+.hist-svg { width: 100%; height: auto; display: block; }
+.hist-bar-legit { fill: var(--muted); opacity: 0.55; }
+.hist-bar-fraud { fill: var(--accent); }
+.hist-axis { stroke: var(--line); stroke-width: 1; }
+.hist-threshold { stroke: var(--warn); stroke-width: 1.5; stroke-dasharray: 3 3; }
+.hist-threshold-label { fill: var(--warn); font-size: 9px; font-family: var(--font); }
+.hist-tick { fill: var(--muted); font-size: 9px; font-family: var(--font); }
+.hist-legend { display: flex; gap: var(--s5, 20px); margin-top: var(--s3); font-size: 11px; color: var(--muted); }
+.hist-legend span { display: inline-flex; align-items: center; gap: var(--s2); }
+.hist-swatch { width: 9px; height: 9px; border-radius: 2px; display: inline-block; }
+.hist-swatch--legit { background: var(--muted); opacity: 0.55; }
+.hist-swatch--fraud { background: var(--accent); }
+
+/* --- explainer side panel (progressive disclosure) ---
+   Enhances the existing <details data-help-topic> affordance: with
+   JavaScript, opening one reads its own rendered title/body (already
+   escaped text in the document, per the no-fabrication rule below)
+   into this larger panel instead of the small inline popover. Without
+   JavaScript the <details> itself still opens — this panel simply
+   never appears, and nothing is lost. */
+.explainer-backdrop {
+  position: fixed; inset: 0; background: rgba(2, 6, 12, 0.5); z-index: 55;
+}
+.explainer-panel {
+  position: fixed; top: 0; right: 0; bottom: 0; z-index: 56;
+  width: min(420px, 100vw);
+  background: var(--bg, #fff);
+  border-left: 1px solid var(--line, #ccd6e0);
+  box-shadow: -12px 0 32px rgba(1, 38, 82, 0.18);
+  padding: var(--s6);
+  overflow-y: auto;
+  transform: translateX(100%);
+  transition: transform var(--t-base) var(--ease);
+}
+.explainer-panel.is-open { transform: translateX(0); }
+.explainer-hd { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--s4); }
+.explainer-eyebrow { font-size: 11px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent-deep, var(--accent)); }
+.explainer-close {
+  appearance: none; border: 1px solid var(--line, #ccd6e0); background: none; color: inherit;
+  width: 28px; height: 28px; border-radius: var(--radius); cursor: pointer; font-size: 16px; line-height: 1;
+}
+.explainer-close:hover { border-color: var(--accent); color: var(--accent-deep, var(--accent)); }
+.explainer-title { margin: 0 0 var(--s4); font-size: 18px; }
+.explainer-body { font-size: 14px; line-height: 1.6; }
+.explainer-body p { max-width: none; }
+body.app-shell .explainer-panel, body:not(.app-shell) .explainer-panel { color: var(--ink); }
+
+/* --- responsive: sidebar becomes an off-canvas panel --- */
+@media (max-width: 980px) {
+  .shell { grid-template-columns: 1fr; }
+  .shell-topbar { display: flex; }
+  .shell-side {
+    position: fixed; left: 0; top: 0; bottom: 0; z-index: 50;
+    width: min(280px, 84vw); height: 100vh;
+    transform: translateX(-100%);
+    transition: transform var(--t-base) var(--ease);
+    box-shadow: 12px 0 32px rgba(0, 0, 0, 0.35);
+  }
+  .shell-side.is-open { transform: translateX(0); }
+  .shell-backdrop.is-open { display: block; position: fixed; inset: 0; z-index: 49; background: rgba(2, 6, 12, 0.5); }
+  .shell-head { padding: var(--s4); }
+  .shell-content { padding: var(--s4); gap: var(--s4); }
+  .panel-row { grid-template-columns: minmax(0, 1fr); }
+  .explainer-panel { width: 100%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shell-side, .explainer-panel { transition: none; }
+}

@@ -1085,6 +1085,77 @@
             function (node) { if (node !== except) { node.open = false; } });
     }
 
+    /* --- explainer side panel -----------------------------------------
+       On the console (app_shell.html), a '?' opens a real panel with room
+       to read instead of the small inline popover. The content is the same
+       server-rendered text the <details> element already carries — this
+       only moves where it is displayed, so nothing here can say anything
+       the page does not already contain, and there is still no fetch and
+       no model behind it. Pages without the shared panel markup (the
+       marketing site) keep the plain inline popover unchanged. */
+    function openExplainer(hint) {
+        var panel = byId("explainer-panel");
+        var backdrop = byId("explainer-backdrop");
+        if (!panel || !backdrop) { return false; }
+
+        var titleNode = hint.querySelector(".hint-title");
+        var bodyNode = hint.querySelector(".hint-panel");
+        if (!titleNode || !bodyNode) { return false; }
+
+        byId("explainer-title").textContent = titleNode.textContent;
+        var paragraphs = bodyNode.querySelectorAll("p");
+        fill(byId("explainer-body"), Array.prototype.map.call(paragraphs, function (p) {
+            return el("p", { text: p.textContent });
+        }));
+
+        backdrop.hidden = false;
+        panel.hidden = false;
+        // Two frames so the browser has painted the hidden->visible change
+        // before the transform transitions; skipping this makes the panel
+        // appear instantly instead of sliding in on the first open.
+        window.requestAnimationFrame(function () {
+            window.requestAnimationFrame(function () { panel.classList.add("is-open"); });
+        });
+        panel.focus();
+        return true;
+    }
+
+    function closeExplainer() {
+        var panel = byId("explainer-panel");
+        var backdrop = byId("explainer-backdrop");
+        if (!panel || !panel.classList.contains("is-open")) { return; }
+        panel.classList.remove("is-open");
+        window.setTimeout(function () {
+            panel.hidden = true;
+            if (backdrop) { backdrop.hidden = true; }
+        }, prefersReducedMotion() ? 0 : 260);
+    }
+
+    function initExplainer() {
+        var panel = byId("explainer-panel");
+        if (!panel) { return; }
+
+        panel.setAttribute("tabindex", "-1");
+        var closeBtn = byId("explainer-close");
+        var backdrop = byId("explainer-backdrop");
+        if (closeBtn) { closeBtn.addEventListener("click", closeExplainer); }
+        if (backdrop) { backdrop.addEventListener("click", closeExplainer); }
+
+        document.addEventListener("click", function (event) {
+            var hint = event.target.closest && event.target.closest("details.hint");
+            if (!hint) { return; }
+            var summary = event.target.closest("summary");
+            if (!summary) { return; }
+            if (openExplainer(hint)) {
+                event.preventDefault();
+            }
+        });
+
+        document.addEventListener("keydown", function (event) {
+            if (event.key === "Escape") { closeExplainer(); }
+        });
+    }
+
     function initHelp() {
         var hints = document.querySelectorAll("details.hint");
         if (!hints.length) { return; }
@@ -1104,6 +1175,8 @@
                 closeHints(null);
             }
         });
+
+        initExplainer();
     }
 
     /* --- motion -----------------------------------------------------------
@@ -1472,6 +1545,38 @@
         }
     }
 
+    /* --- console shell: off-canvas sidebar on narrow viewports ------------- */
+    function initShell() {
+        var toggle = byId("shell-toggle");
+        var side = byId("shell-side");
+        var backdrop = byId("shell-backdrop");
+        if (!toggle || !side || !backdrop) { return; }
+
+        var close = function () {
+            side.classList.remove("is-open");
+            backdrop.classList.remove("is-open");
+            backdrop.hidden = true;
+            toggle.setAttribute("aria-expanded", "false");
+        };
+        var open = function () {
+            side.classList.add("is-open");
+            backdrop.classList.add("is-open");
+            backdrop.hidden = false;
+            toggle.setAttribute("aria-expanded", "true");
+        };
+
+        toggle.addEventListener("click", function () {
+            if (side.classList.contains("is-open")) { close(); } else { open(); }
+        });
+        backdrop.addEventListener("click", close);
+        document.addEventListener("keydown", function (event) {
+            if (event.key === "Escape") { close(); }
+        });
+        Array.prototype.forEach.call(side.querySelectorAll(".shell-nav-link"), function (link) {
+            link.addEventListener("click", close);
+        });
+    }
+
     /* --- page setup -------------------------------------------------------
 
        One script serves four pages, so every block is guarded on the elements
@@ -1482,6 +1587,7 @@
     initHelp();
     initMotion();
     initNavState();
+    initShell();
     initTour();
 
     Array.prototype.forEach.call(document.querySelectorAll(".tab"), function (tab) {

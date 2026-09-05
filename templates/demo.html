@@ -1,93 +1,69 @@
-{% extends "base.html" %}
+{% extends "app_shell.html" %}
 {% import "_help.html" as h with context %}
-{% block title %}Review queue — Fraud spike detector{% endblock %}
+{% block title %}Queue — Fraud spike detector{% endblock %}
 {% block description %}Human-gated review console for flagged transaction and spike risk briefs.{% endblock %}
 
+{% block view_title %}Queue{% endblock %}
+{% block view_status %}Reading is public &middot; recording a decision is not{% endblock %}
+
 {% block content %}
-<section class="console">
-  <div class="wrap">
-    <div class="console-hd">
-      <div>
-        <p class="eyebrow">Demo</p>
-        <h1>Review queue</h1>
-        <p>Flagged transactions and spike events awaiting a human decision, read from the committed
-           snapshot this instance serves. Reading is public; recording a decision is not.</p>
-      </div>
-      <div class="grid g-3 celled" style="gap:0;flex:0 1 auto">
-        <div class="stat">
-          <span class="stat-label">Source</span>
-          <span class="stat-note" style="font-size:13px;color:var(--ink);font-weight:600">IEEE-CIS held-out {{ h.help('chronological_split', '', 'right') }}</span>
-        </div>
-        <div class="stat">
-          <span class="stat-label">Model</span>
-          <span class="stat-note" style="font-size:13px;color:var(--ink);font-weight:600">XGBoost + graph {{ h.help('graph_features', '', 'right') }}</span>
-        </div>
-        <div class="stat">
-          <span class="stat-label">Authority</span>
-          <span class="stat-note" style="font-size:13px;color:var(--ink);font-weight:600">Human reviewer {{ h.help('human_decides', '', 'right') }}</span>
-        </div>
-      </div>
-    </div>
-
-    <h2 class="visually-hidden">Queue overview</h2>
-    <div class="kpis">
-      <div class="kpi">
-        <p class="kpi-label">Awaiting review</p>
-        <p class="kpi-value num" id="metric-pending">&mdash;</p>
-        <p class="kpi-note" id="metric-pending-note">&nbsp;</p>
-      </div>
-      <div class="kpi">
-        <p class="kpi-label">Mean risk score {{ h.help('threshold') }}</p>
-        <p class="kpi-value num" id="metric-score">&mdash;</p>
-        <p class="kpi-note" id="metric-score-note">&nbsp;</p>
-      </div>
-      <div class="kpi">
-        <p class="kpi-label">Est. false-positive cost {{ h.help('cost_ratio', '-tile') }}</p>
-        <p class="kpi-value num" id="metric-cost">&mdash;</p>
-        <p class="kpi-note">Disrupted value if every pending item is legitimate</p>
-      </div>
-      <div class="kpi">
-        <p class="kpi-label">Decisions recorded</p>
-        <p class="kpi-value num" id="metric-resolved">&mdash;</p>
-        <p class="kpi-note">Append-only, this instance</p>
-      </div>
-    </div>
-
-    <div class="tabs" role="tablist" aria-label="Console views">
-      <button class="tab" type="button" role="tab" id="tab-pending"
-              aria-controls="view-pending" aria-selected="true" data-view="pending">
-        Pending review <span class="tab-count num" id="count-pending">0</span>
-      </button>
-      <button class="tab" type="button" role="tab" id="tab-audit"
-              aria-controls="view-audit" aria-selected="false" data-view="audit">
-        Audit trail <span class="tab-count num" id="count-audit">0</span>
-      </button>
-    </div>
-
-    <section id="view-pending" role="tabpanel" aria-labelledby="tab-pending" tabindex="-1"
-             style="padding:0;border:0">
-      <div class="section-hd">
-        <h2>Briefs awaiting a decision {{ h.help('spike') }}</h2>
-        <p>Ordered by model risk score, highest first. Every factor shown is a model input, not a conclusion.</p>
-      </div>
-      <div id="pending-container" aria-live="polite" aria-busy="true"></div>
-    </section>
-
-    <section id="view-audit" role="tabpanel" aria-labelledby="tab-audit" tabindex="-1" hidden
-             style="padding:0;border:0">
-      <div class="section-hd">
-        <h2>Recorded decisions</h2>
-        <p>Every resolution written to the append-only audit log, newest first. Rows are never edited or removed; a correction is a new row.</p>
-      </div>
-      <div id="audit-container" aria-live="polite"></div>
-    </section>
+<p class="shell-lede">Review queue: flagged transactions and spike events read from the committed
+   snapshot this instance serves, waiting on a human decision.</p>
+<div class="kpis shell-kpis">
+  <div class="kpi">
+    <p class="kpi-label">Awaiting review</p>
+    <p class="kpi-value num" id="metric-pending">&mdash;</p>
+    <p class="kpi-note" id="metric-pending-note">&nbsp;</p>
   </div>
-</section>
-{% endblock %}
+  <div class="kpi">
+    <p class="kpi-label">Mean risk score {{ h.help('threshold') }}</p>
+    <p class="kpi-value num" id="metric-score">&mdash;</p>
+    <p class="kpi-note" id="metric-score-note">&nbsp;</p>
+  </div>
+  <div class="kpi">
+    <p class="kpi-label">Est. false-positive cost {{ h.help('cost_ratio', '-tile') }}</p>
+    <p class="kpi-value num" id="metric-cost">&mdash;</p>
+    <p class="kpi-note">Disrupted value if every pending item is legitimate</p>
+  </div>
+  <div class="kpi">
+    <p class="kpi-label">Decisions recorded {{ h.help('audit_log') }}</p>
+    <p class="kpi-value num" id="metric-resolved">&mdash;</p>
+    <p class="kpi-note">Append-only, this instance</p>
+  </div>
+</div>
 
-{% block colophon %}
-<p class="foot-note" style="margin-top:0;border:0;padding-top:0">
-    Ground-truth fraud labels are deliberately not present in the review-queue database, so the console
-    shows a reviewer exactly what a reviewer would see.
-</p>
+<section class="panel">
+  <div class="tabs" role="tablist" aria-label="Console views">
+    <button class="tab" type="button" role="tab" id="tab-pending"
+            aria-controls="view-pending" aria-selected="true" data-view="pending">
+      Pending review <span class="tab-count num" id="count-pending">0</span>
+    </button>
+    <button class="tab" type="button" role="tab" id="tab-audit"
+            aria-controls="view-audit" aria-selected="false" data-view="audit">
+      Audit trail <span class="tab-count num" id="count-audit">0</span>
+    </button>
+  </div>
+
+  <div id="view-pending" role="tabpanel" aria-labelledby="tab-pending" tabindex="-1">
+    <div class="section-hd">
+      <h2>Briefs awaiting a decision {{ h.help('spike') }}</h2>
+      <p>Ordered by model risk score, highest first. Every factor shown is a model input, not a conclusion.</p>
+    </div>
+    <div id="pending-container" aria-live="polite" aria-busy="true"></div>
+  </div>
+
+  <div id="view-audit" role="tabpanel" aria-labelledby="tab-audit" tabindex="-1" hidden>
+    <div class="section-hd">
+      <h2>Recorded decisions</h2>
+      <p>Every resolution written to the append-only audit log, newest first. Rows are never edited or removed; a correction is a new row.</p>
+    </div>
+    <div id="audit-container" aria-live="polite"></div>
+  </div>
+
+  <p class="src" style="margin-top:var(--s5, 20px)">
+    Ground-truth fraud labels are deliberately not present in this database, so the console shows a
+    reviewer exactly what a reviewer would see. Source: IEEE-CIS held-out split {{ h.help('chronological_split', '-demo', 'right') }},
+    scored by XGBoost + graph features {{ h.help('graph_features', '-demo', 'right') }}. Every decision belongs to a human reviewer {{ h.help('human_decides', '-demo', 'right') }}.
+  </p>
+</section>
 {% endblock %}

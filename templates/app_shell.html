@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}Fraud spike detector{% endblock %}</title>
+    <meta name="csrf-token" content="{{ csrf_token }}">
+    <meta name="description" content="{% block description %}The console an analyst works a shift on: every transaction scored, coordinated bursts surfaced, and the reasoning written up.{% endblock %}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='img/logo.svg') }}">
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='img/logo.svg') }}">
+    <meta name="theme-color" content="#012652">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/site.css') }}">
+</head>
+<body class="app-shell" data-page="{{ active }}">
+    <a class="skip-link" href="#main">Skip to content</a>
+
+    <div class="shell" id="shell">
+        <div class="shell-topbar">
+            <button class="shell-toggle" id="shell-toggle" type="button" aria-expanded="false" aria-controls="shell-side">
+                <span class="shell-toggle-bars" aria-hidden="true"></span>
+                <span class="visually-hidden">Open console menu</span>
+            </button>
+            <a class="shell-topbar-brand" href="{{ url_for('overview_page') }}">
+                <img class="nav-mark" src="{{ url_for('static', filename='img/logo.svg') }}" alt="" width="22" height="22">
+                <span>Fraud&nbsp;spike&nbsp;detector</span>
+            </a>
+        </div>
+
+        <div class="shell-backdrop" id="shell-backdrop" hidden></div>
+
+        <aside class="shell-side" id="shell-side">
+            <a class="shell-brand" href="{{ url_for('overview_page') }}">
+                <img class="nav-mark" src="{{ url_for('static', filename='img/logo.svg') }}" alt="" width="24" height="24">
+                <span class="shell-brand-word">Fraud spike<br><b>detector</b></span>
+            </a>
+
+            <nav class="shell-nav" aria-label="Console">
+                <a class="shell-nav-link" href="{{ url_for('overview_page') }}"
+                   {% if active == 'overview' %}aria-current="page"{% endif %}>
+                    <span>Overview</span>
+                </a>
+                <a class="shell-nav-link" href="{{ url_for('demo_page') }}"
+                   {% if active == 'demo' %}aria-current="page"{% endif %}>
+                    <span>Queue</span>
+                    {% if nav_pending_count is not none %}
+                    <span class="shell-nav-badge num">{{ nav_pending_count }}</span>
+                    {% endif %}
+                </a>
+                <a class="shell-nav-link" href="{{ url_for('live_page') }}"
+                   {% if active == 'live' %}aria-current="page"{% endif %}>
+                    <span>Live</span>
+                </a>
+                <a class="shell-nav-link" href="{{ url_for('metrics_page') }}"
+                   {% if active == 'metrics' %}aria-current="page"{% endif %}>
+                    <span>Metrics</span>
+                </a>
+            </nav>
+
+            <div class="shell-side-foot">
+                <button class="shell-tour-btn" type="button" id="tour-start">
+                    <span aria-hidden="true">&#9654;</span> Guided tour
+                </button>
+                <a class="shell-side-link" href="https://github.com/fyzahm3/fraud-spike-detector" target="_blank" rel="noopener">
+                    Source &#8599;
+                </a>
+                <a class="shell-side-link" href="{{ url_for('index') }}">
+                    &larr; Marketing site
+                </a>
+                <p class="shell-disclosure">
+                    <strong>Defense-only.</strong> Flags, groups, and explains &mdash;
+                    never blocks, holds, or cancels a payment.
+                </p>
+                <div class="shell-status">
+                    <span class="shell-status-dot{% if not model_status.available %} shell-status-dot--off{% endif %}" aria-hidden="true"></span>
+                    {% if model_status.available %}
+                    <span>{{ model_status.variant }} model &middot; {{ model_status.n_features }} features</span>
+                    {% else %}
+                    <span>model status unavailable</span>
+                    {% endif %}
+                </div>
+            </div>
+        </aside>
+
+        <div class="shell-main">
+            <header class="shell-head">
+                <div class="shell-head-title">
+                    <h1>{% block view_title %}{% endblock %}</h1>
+                </div>
+                <p class="shell-head-status num">{% block view_status %}{% endblock %}</p>
+            </header>
+
+            <main id="main" class="shell-content">
+                {% block content %}{% endblock %}
+            </main>
+        </div>
+    </div>
+
+    <div class="explainer-backdrop" id="explainer-backdrop" hidden></div>
+    <aside class="explainer-panel" id="explainer-panel" role="dialog" aria-modal="true" aria-labelledby="explainer-title" hidden>
+        <div class="explainer-hd">
+            <span class="explainer-eyebrow">Explain this</span>
+            <button class="explainer-close" id="explainer-close" type="button" aria-label="Close explanation">&times;</button>
+        </div>
+        <h3 class="explainer-title" id="explainer-title"></h3>
+        <div class="explainer-body" id="explainer-body"></div>
+    </aside>
+
+    {#
+      Tour content, rendered by the server as escaped text. The engine reads
+      these nodes with textContent, so nothing here can become markup, and the
+      explanations are in the document from the first byte rather than fetched.
+    #}
+    <div id="tour-data" hidden>
+        {% for step in tour_steps %}
+        <div class="tour-step-data"
+             data-index="{{ step.index }}"
+             data-total="{{ step.total }}"
+             data-target="{{ step.target }}">
+            <span class="tour-step-title">{{ step.title }}</span>
+            <span class="tour-step-body">{{ step.body }}</span>
+        </div>
+        {% endfor %}
+    </div>
+
+    <script src="{{ url_for('static', filename='js/console.js') }}"></script>
+</body>
+</html>

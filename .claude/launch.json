@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "flask-dev",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-c", "source .venv/bin/activate && python app.py --port 5050 --db data/demo_review_queue.db"],
+      "port": 5050
+    }
+  ]
+}

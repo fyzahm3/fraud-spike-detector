@@ -1,0 +1,165 @@
+{% extends "app_shell.html" %}
+{% import "_help.html" as h with context %}
+{% block title %}Overview — Fraud spike detector{% endblock %}
+{% block description %}Console home: held-out performance, the score distribution, queue composition, and what the graph features changed.{% endblock %}
+
+{% set pc = evidence.phase_comparison %}
+{% set run = evidence.pipeline_run %}
+{% set sd = evidence.score_distribution %}
+{% set prov = evidence.demo_seed_provenance %}
+
+{% block view_title %}Overview{% endblock %}
+{% block view_status %}
+{% if run %}{{ '{:,}'.format(run.total_rows_scored) }} transactions scored &middot; threshold {{ '%.4f'|format(run.risk_threshold) }}{% endif %}
+{% endblock %}
+
+{% block content %}
+{% if pc and run %}
+<div class="kpis shell-kpis">
+  <div class="kpi">
+    <p class="kpi-label">AUC-PR {{ h.help('auc_pr') }}</p>
+    <p class="kpi-value num">{{ '%.4f'|format(pc.graph.auc_pr) }}</p>
+    <p class="kpi-note">held-out test, graph variant</p>
+  </div>
+  <div class="kpi">
+    <p class="kpi-label">Value ratio {{ h.help('cost_ratio') }}</p>
+    <p class="kpi-value num">{{ '%.2f'|format(pc.graph.ratio) }}&times;</p>
+    <p class="kpi-note">caught per unit disrupted</p>
+  </div>
+  <div class="kpi">
+    <p class="kpi-label">Transactions scored</p>
+    <p class="kpi-value num">{{ '{:,}'.format(run.total_rows_scored) }}</p>
+    <p class="kpi-note">held-out test split</p>
+  </div>
+  <div class="kpi">
+    <p class="kpi-label">Throughput</p>
+    <p class="kpi-value num">{{ '{:,}'.format(run.throughput_txns_per_sec|int) }}/s</p>
+    <p class="kpi-note">one pipeline run, this host</p>
+  </div>
+</div>
+{% endif %}
+
+<div class="panel-row">
+  <section class="panel shell-panel-primary">
+    <div class="panel-hd">
+      <div>
+        <h2>Score distribution {{ h.help('auc_pr', '-hist') }}</h2>
+        <p class="panel-sub">Every held-out transaction's predicted probability, binned. Bar height uses a
+          square-root scale so the dominant near-zero bin does not flatten the rest.</p>
+      </div>
+    </div>
+    {% if sd %}
+    {% set W = 700 %}
+    {% set H = 200 %}
+    {% set gap = 2 %}
+    {% set bw = (W - (sd.n_bins - 1) * gap) / sd.n_bins %}
+    <svg class="hist-svg" viewBox="0 0 {{ W }} {{ H + 26 }}" role="img"
+         aria-label="Histogram of held-out model scores, threshold marked">
+      <line class="hist-axis" x1="0" y1="{{ H }}" x2="{{ W }}" y2="{{ H }}"></line>
+      {% for bin in sd.bins %}
+      {% set i = loop.index0 %}
+      {% set x = i * (bw + gap) %}
+      {% set frac_total = (bin.total ** 0.5) / (sd.max_bin_total ** 0.5) if sd.max_bin_total else 0 %}
+      {% set bar_h = 4 + (H - 8) * frac_total %}
+      {% set y = H - bar_h %}
+      {% set frac_fraud = (bin.fraud / bin.total) if bin.total else 0 %}
+      {% set fraud_h = bar_h * frac_fraud %}
+      <g>
+        <title>{{ '%.2f'|format(bin.lo) }}&ndash;{{ '%.2f'|format(bin.hi) }}: {{ '{:,}'.format(bin.total) }} transactions, {{ '{:,}'.format(bin.fraud) }} fraud</title>
+        <rect class="hist-bar-legit" x="{{ '%.2f'|format(x) }}" y="{{ '%.2f'|format(y) }}"
+              width="{{ '%.2f'|format(bw) }}" height="{{ '%.2f'|format(bar_h) }}"></rect>
+        {% if fraud_h > 0 %}
+        <rect class="hist-bar-fraud" x="{{ '%.2f'|format(x) }}" y="{{ '%.2f'|format(y) }}"
+              width="{{ '%.2f'|format(bw) }}" height="{{ '%.2f'|format(fraud_h) }}"></rect>
+        {% endif %}
+      </g>
+      {% endfor %}
+      {% set tx = sd.threshold * W %}
+      <line class="hist-threshold" x1="{{ '%.2f'|format(tx) }}" y1="0" x2="{{ '%.2f'|format(tx) }}" y2="{{ H }}"></line>
+      <text class="hist-threshold-label" x="{{ '%.2f'|format(tx + 4) }}" y="10">threshold {{ '%.4f'|format(sd.threshold) }}</text>
+      {% for tick in [0, 0.25, 0.5, 0.75, 1.0] %}
+      <text class="hist-tick" x="{{ '%.2f'|format(tick * W) }}" y="{{ H + 16 }}" text-anchor="{{ 'start' if tick == 0 else ('end' if tick == 1.0 else 'middle') }}">{{ '%.2f'|format(tick) }}</text>
+      {% endfor %}
+    </svg>
+    <div class="hist-legend">
+      <span><span class="hist-swatch hist-swatch--legit"></span> legitimate</span>
+      <span><span class="hist-swatch hist-swatch--fraud"></span> fraud</span>
+    </div>
+    <p class="src">{{ '{:,}'.format(sd.n_rows) }} held-out rows, {{ sd.n_bins }} bins. <code>results/score_distribution.json</code></p>
+    {% else %}
+    <p class="src">Not available in this deployment &mdash; <code>results/score_distribution.json</code> could not be read.</p>
+    {% endif %}
+  </section>
+
+  <aside class="shell-panel-rail">
+    {% if prov %}
+    {% set n_spike = prov.seeded_brief_count - prov.seeded_true_positives - prov.seeded_false_positives %}
+    <section class="panel">
+      <div class="panel-hd">
+        <div>
+          <h2>Queue composition {{ h.help('spike') }}</h2>
+          <p class="panel-sub">The committed demo snapshot, against ground truth held outside the database.</p>
+        </div>
+      </div>
+      <div class="bar-row"><span>True positives</span><span class="bar-track"><span class="bar-fill" style="--w:{{ '%.1f'|format(prov.seeded_true_positives / prov.seeded_brief_count * 100) }}%"></span></span><span class="bar-val num">{{ prov.seeded_true_positives }}</span></div>
+      <div class="bar-row"><span>False positives</span><span class="bar-track"><span class="bar-fill dim" style="--w:{{ '%.1f'|format(prov.seeded_false_positives / prov.seeded_brief_count * 100) }}%"></span></span><span class="bar-val num">{{ prov.seeded_false_positives }}</span></div>
+      <div class="bar-row"><span>Spike events</span><span class="bar-track"><span class="bar-fill" style="--w:{{ '%.1f'|format(n_spike / prov.seeded_brief_count * 100) }}%"></span></span><span class="bar-val num">{{ n_spike }}</span></div>
+      <p class="src"><code>results/demo_seed_provenance.json</code></p>
+    </section>
+    {% endif %}
+
+    {% if pc %}
+    <section class="panel">
+      <div class="panel-hd">
+        <div>
+          <h2>Confusion matrix</h2>
+          <p class="panel-sub">Graph variant, held-out test split.</p>
+        </div>
+      </div>
+      <div class="confmat">
+        <div class="confmat-corner"></div>
+        <div class="confmat-label">Predicted fraud</div>
+        <div class="confmat-label">Predicted legitimate</div>
+        <div class="confmat-label">Actually fraud</div>
+        <div class="confmat-value is-correct"><span class="num">{{ '{:,}'.format(pc.graph.tp) }}</span><span class="confmat-tag">true positive</span></div>
+        <div class="confmat-value is-wrong"><span class="num">{{ '{:,}'.format(pc.graph.fn) }}</span><span class="confmat-tag">false negative</span></div>
+        <div class="confmat-label">Actually legitimate</div>
+        <div class="confmat-value is-wrong"><span class="num">{{ '{:,}'.format(pc.graph.fp) }}</span><span class="confmat-tag">false positive</span></div>
+        <div class="confmat-value is-correct"><span class="num">{{ '{:,}'.format(pc.graph.tn) }}</span><span class="confmat-tag">true negative</span></div>
+      </div>
+      <p class="src"><code>results/phase_comparison.json</code></p>
+    </section>
+    {% endif %}
+  </aside>
+</div>
+
+{% if pc %}
+<section class="panel shell-panel-secondary">
+  <div class="panel-hd">
+    <div>
+      <h2>Baseline vs. graph features {{ h.help('graph_features') }}</h2>
+      <p class="panel-sub">The same held-out data, scored once by each variant. The only difference is the
+        twelve causal graph features. Full breakdown on the <a href="{{ url_for('metrics_page') }}">metrics page</a>.</p>
+    </div>
+  </div>
+  <div class="grid g-2">
+    <div>
+      <h4>AUC-PR</h4>
+      <div class="bar-row"><span>Baseline</span><span class="bar-track"><span class="bar-fill dim" style="--w:{{ '%.1f'|format(pc.baseline.auc_pr * 100) }}%"></span></span><span class="bar-val num">{{ '%.4f'|format(pc.baseline.auc_pr) }}</span></div>
+      <div class="bar-row"><span>Graph</span><span class="bar-track"><span class="bar-fill" style="--w:{{ '%.1f'|format(pc.graph.auc_pr * 100) }}%"></span></span><span class="bar-val num">{{ '%.4f'|format(pc.graph.auc_pr) }}</span></div>
+    </div>
+    <div>
+      <h4>Value ratio {{ h.help('cost_ratio', '-overview') }}</h4>
+      {% set ratio_scale = 100.0 / 2.5 %}
+      <div class="bar-row"><span>Baseline</span><span class="bar-track"><span class="bar-fill dim" style="--w:{{ '%.1f'|format(pc.baseline.ratio * ratio_scale) }}%"></span></span><span class="bar-val num">{{ '%.2f'|format(pc.baseline.ratio) }}&times;</span></div>
+      <div class="bar-row"><span>Graph</span><span class="bar-track"><span class="bar-fill" style="--w:{{ '%.1f'|format(pc.graph.ratio * ratio_scale) }}%"></span></span><span class="bar-val num">{{ '%.2f'|format(pc.graph.ratio) }}&times;</span></div>
+    </div>
+  </div>
+</section>
+{% else %}
+<section class="panel">
+  <h2>Evidence not available in this deployment</h2>
+  <p><code>results/phase_comparison.json</code> could not be read.</p>
+</section>
+{% endif %}
+{% endblock %}
