@@ -307,6 +307,41 @@ def test_cold_start_ui_cannot_hang_silently():
     )
 
 
+def test_recording_a_decision_is_visibly_confirmed():
+    """A decision button must say that it did something.
+
+    The first version of this flow was silent: the card left a thirty-item list
+    and a count changed on a tab the reviewer was not looking at, which is
+    indistinguishable from a dead button. Recording a decision is the one
+    consequential act in this interface and the least reversible, so the
+    confirmation is asserted rather than left to judgement.
+    """
+    script = Path("static/js/console.js").read_text()
+
+    # Confirmed in place, naming the decision and where it was written.
+    assert "brief-recorded" in script
+    assert "Decision recorded: " in script
+    assert "append-only audit log" in script
+
+    # Announced, with a route to the consequence.
+    assert "function toast" in script
+    assert "View audit trail" in script
+    assert "showAuditTrail" in script
+    assert 'data-queue-id' in script, "the written audit row cannot be located to flash"
+    assert "is-flash" in script
+
+    # A failure has to be as loud as a success.
+    assert "Decision NOT recorded" in script
+
+    # The refresh is deferred; without the pause the confirmation is replaced
+    # within a few hundred milliseconds and the card simply vanishes again.
+    assert "2600" in script, "the list refresh is not held long enough to read"
+
+    css = Path("static/css/site.css").read_text()
+    for selector in (".toast", ".brief-recorded", ".audit tbody tr.is-flash"):
+        assert selector in css, f"{selector} has no styling"
+
+
 def test_health_is_public_and_cheap_enough_to_ping(client):
     """The external uptime monitor pings this every few minutes."""
     res = client.get("/health")

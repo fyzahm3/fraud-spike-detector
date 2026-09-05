@@ -298,7 +298,7 @@
             ? el("td", { className: "audit-note", text: entry.note })
             : el("td", { className: "audit-note audit-note-empty", text: "No note recorded" });
 
-        return el("tr", {}, [
+        return el("tr", { attrs: { "data-queue-id": String(entry.queue_id) } }, [
             el("td", { className: "audit-id", text: "#" + entry.queue_id }),
             el("td", {}, [
                 el("span", { className: "mono", text: entry.entity_id }),
@@ -658,6 +658,85 @@
             });
     }
 
+    /* --- recording a decision ---------------------------------------------
+
+       A resolution is the one destructive-looking thing a reviewer does here,
+       and the first version of this gave almost no sign it had happened: the
+       card left a thirty-item list and a count changed on a tab nobody was
+       looking at. That reads as a dead button.
+
+       So a recorded decision now says so three times over — the card is
+       replaced in place by a confirmation naming the decision, a toast appears
+       with a route to the consequence, and the audit trail flashes the row that
+       was written. The append-only log is the strongest thing this system has;
+       the interface should point at it rather than hide it.
+       --------------------------------------------------------------------- */
+
+    function toast(message, linkLabel, onLink) {
+        var host = byId("toast-host");
+        if (!host) {
+            host = el("div", { id: "toast-host", className: "toast-host" });
+            document.body.appendChild(host);
+        }
+        var node = el("div", { className: "toast", attrs: { role: "status" } }, [
+            el("span", { className: "toast-text", text: message })
+        ]);
+        if (linkLabel && onLink) {
+            var link = el("button", {
+                className: "toast-link", text: linkLabel, attrs: { type: "button" }
+            });
+            link.addEventListener("click", function () {
+                onLink();
+                if (node.parentNode) { node.parentNode.removeChild(node); }
+            });
+            node.appendChild(link);
+        }
+        host.appendChild(node);
+        window.setTimeout(function () {
+            node.classList.add("is-out");
+            window.setTimeout(function () {
+                if (node.parentNode) { node.parentNode.removeChild(node); }
+            }, 400);
+        }, 6000);
+    }
+
+    function showAuditTrail(flashQueueId) {
+        showView("audit");
+        var panel = byId("view-audit");
+        if (panel) { panel.scrollIntoView({ block: "start" }); }
+        if (flashQueueId === undefined) { return; }
+        var row = document.querySelector('[data-queue-id="' + flashQueueId + '"]');
+        if (row) {
+            row.classList.add("is-flash");
+            window.setTimeout(function () { row.classList.remove("is-flash"); }, 2400);
+        }
+    }
+
+    function confirmationCard(queueId, action, note) {
+        var label = DECISION_LABELS[action] || action;
+        var nodes = [
+            el("p", { className: "recorded-title", text: "Decision recorded: " + label }),
+            el("p", {
+                className: "recorded-note",
+                text: note
+                    ? "Reviewer note: " + note
+                    : "No reviewer note was recorded with this decision."
+            }),
+            el("p", {
+                className: "recorded-note",
+                text: "Written to the append-only audit log as item #" + queueId +
+                      ". It cannot be edited or deleted; a correction is a new row."
+            })
+        ];
+        var view = el("button", {
+            className: "btn btn-quiet", text: "View it in the audit trail",
+            attrs: { type: "button" }
+        });
+        view.addEventListener("click", function () { showAuditTrail(queueId); });
+        nodes.push(view);
+        return el("div", { className: "recorded" }, nodes);
+    }
+
     function resolveItem(queueId, action, note) {
         var card = byId("item-" + queueId);
         if (card) {
@@ -674,7 +753,41 @@
             },
             body: JSON.stringify({ action: action, note: note || "" })
         }).then(function (res) {
-            if (res.ok) { return load(); }
+            if (res.ok) {
+                /* Confirm in place first. The list is refreshed a moment later,
+                   so the card is not yanked out from under the eye that is
+                   still reading it. */
+                if (card) {
+                    card.classList.remove("brief-resolving");
+                    card.classList.add("brief-recorded");
+                    fill(card, [confirmationCard(queueId, action, note)]);
+                }
+                toast(
+                    "Decision recorded: " + (DECISION_LABELS[action] || action),
+                    "View audit trail",
+                    function () { showAuditTrail(queueId); }
+                );
+                /* Hold before refreshing. Reloading immediately replaced the
+                   confirmation within a few hundred milliseconds — the card
+                   simply vanished again, which is the behaviour being fixed.
+                   The pause is what makes the confirmation readable. */
+                return new Promise(function (resolve) {
+                    window.setTimeout(function () {
+                        load().then(function () {
+                            /* Counts move as a consequence of the decision, so
+                               draw the eye to the one that changed. */
+                            var tile = byId("metric-resolved");
+                            if (tile) {
+                                tile.classList.add("is-bumped");
+                                window.setTimeout(function () {
+                                    tile.classList.remove("is-bumped");
+                                }, 1400);
+                            }
+                            resolve();
+                        });
+                    }, 2600);
+                });
+            }
             return res.json().catch(function () { return {}; }).then(function (body) {
                 throw new Error(body.error || "The server returned HTTP " + res.status + ".");
             });
@@ -692,6 +805,7 @@
                     function () { resolveItem(queueId, action, note); }
                 ));
             }
+            toast("Decision NOT recorded \u2014 nothing was written to the audit log.");
         });
     }
 

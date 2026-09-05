@@ -535,3 +535,79 @@ section.tinted { background: var(--canvas); }
 .disclosure { padding: var(--s3) 0; background: var(--ink); color: #fff; font-size: 12px; line-height: 1.55; }
 .disclosure p { margin: 0; max-width: 110ch; }
 .disclosure strong { color: var(--accent); }
+
+/* ============================================================
+   15. Decision feedback
+
+   Recording a decision used to be silent: the card left the list and a
+   count changed on a tab the reviewer was not looking at, which reads
+   as a button that does nothing. The confirmation is stated in place,
+   announced in a toast, and traceable to the audit row it wrote.
+   ============================================================ */
+
+.brief-resolving { opacity: 0.55; transition: opacity var(--t-base) var(--ease); }
+
+.brief-recorded { border-color: var(--good); border-left: 2px solid var(--good); }
+
+.recorded { padding: var(--s6); }
+.recorded-title { margin: 0 0 var(--s2); font-size: 15px; font-weight: 700; color: var(--good); }
+.recorded-note { margin: 0 0 var(--s2); font-size: 12px; color: var(--muted); max-width: 74ch; }
+.recorded .btn { margin-top: var(--s2); }
+
+.toast-host {
+    position: fixed;
+    z-index: 60;
+    right: var(--s6);
+    bottom: var(--s6);
+    display: flex;
+    flex-direction: column;
+    gap: var(--s2);
+    max-width: min(30rem, calc(100vw - 2 * var(--s6)));
+}
+
+.toast {
+    display: flex;
+    align-items: center;
+    gap: var(--s4);
+    padding: var(--s3) var(--s4);
+    border: 1px solid var(--ink);
+    border-left: 3px solid var(--accent);
+    border-radius: var(--radius);
+    background: var(--ink);
+    color: #fff;
+    font-size: 13px;
+    box-shadow: 0 12px 30px rgba(1, 38, 82, 0.24);
+    animation: toast-in var(--t-base) var(--ease) both;
+}
+
+.toast-text { flex: 1 1 auto; }
+
+.toast-link {
+    appearance: none;
+    flex: 0 0 auto;
+    padding: var(--s1) var(--s2);
+    border: 1px solid color-mix(in srgb, #fff 40%, transparent);
+    border-radius: var(--radius);
+    background: transparent;
+    color: #fff;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background var(--t-fast) var(--ease);
+}
+.toast-link:hover { background: color-mix(in srgb, #fff 16%, transparent); }
+
+.toast.is-out { animation: toast-out var(--t-base) var(--ease) both; }
+
+@keyframes toast-in  { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+@keyframes toast-out { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateY(8px); } }
+
+/* The audit row just written, so the reviewer can see the consequence. */
+.audit tbody tr.is-flash { background: color-mix(in srgb, var(--accent) 16%, #fff); }
+
+.kpi-value.is-bumped { color: var(--accent); transition: color var(--t-base) var(--ease); }
+
+@media (prefers-reduced-motion: reduce) {
+    .toast, .toast.is-out { animation: none; }
+}
