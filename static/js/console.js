@@ -1170,9 +1170,26 @@
         window.requestAnimationFrame(frame);
     }
 
+    function revealEverything() {
+        Array.prototype.forEach.call(
+            document.querySelectorAll(".reveal, .bar-fill"),
+            function (n) { n.classList.add("is-in"); }
+        );
+    }
+
     function initMotion() {
+        /* Opting in to the hidden state, rather than the stylesheet imposing it.
+           Nothing above this line can leave the page invisible. */
+        document.documentElement.classList.add("js-motion");
+
         var reveals = document.querySelectorAll(".reveal");
         var bars = document.querySelectorAll(".bar-fill");
+
+        /* Failsafe. If the observer never fires — a viewport resized to the full
+           document height by a screenshot tool, a browser reporting nothing as
+           intersecting, anything unforeseen — the content appears regardless.
+           Better to lose the animation than to lose the page. */
+        window.setTimeout(revealEverything, 2500);
 
         /* Without IntersectionObserver, or with reduced motion requested,
            everything is placed in its final state immediately. The page must

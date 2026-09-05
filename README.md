@@ -40,9 +40,9 @@ Take the built-in **guided tour** for a 14-step walkthrough of the whole project
 
 |  |  |
 |---|---|
-| <img src="docs/img/screenshot-landing.svg" alt="Landing page"> | <img src="docs/img/screenshot-metrics.svg" alt="Evidence page"> |
+| <img src="docs/img/screenshot-landing.png" alt="Landing page"> | <img src="docs/img/screenshot-metrics.svg" alt="Evidence page"> |
 | **Overview** — the cost trade, stated first | **Evidence** — every figure read from a committed file |
-| <img src="docs/img/screenshot-demo.svg" alt="Review queue"> | <img src="docs/img/screenshot-live.svg" alt="Live ingestion"> |
+| <img src="docs/img/screenshot-demo.png" alt="Review queue"> | <img src="docs/img/screenshot-live.svg" alt="Live ingestion"> |
 | **Review queue** — briefs a human decides on | **Live ingestion** — a real payment, scored at authorization |
 
 ## How it works

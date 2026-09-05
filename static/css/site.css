@@ -282,7 +282,7 @@ section.tinted { background: var(--canvas); }
 
 .bar-row { display: grid; grid-template-columns: 170px minmax(0, 1fr) 90px; gap: var(--s4); align-items: center; padding: var(--s2) 0; font-size: 13px; }
 .bar-track { display: block; height: 10px; background: var(--canvas-2); border-radius: 2px; overflow: hidden; }
-.bar-fill { display: block; height: 100%; background: var(--accent); width: 0; }
+.bar-fill { display: block; height: 100%; background: var(--accent); width: var(--w, 0); }
 .bar-fill.dim { background: var(--muted); }
 .bar-val { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
 
@@ -293,12 +293,17 @@ section.tinted { background: var(--canvas); }
    moves on its own after settling, and every animated figure ends on
    the exact committed string it started from in the markup. */
 
-.reveal {
+/* Scoped to html.js-motion, which the script adds at start-up. Unscoped, a
+   .reveal that is never observed stays at opacity 0 forever — so with
+   JavaScript disabled, or after any error thrown before the motion code runs,
+   the whole page renders blank. Content is visible by default; the hidden
+   state exists only while something is guaranteed to undo it. */
+.js-motion .reveal {
   opacity: 0;
   transform: translateY(14px);
   transition: opacity var(--t-slow) var(--ease), transform var(--t-slow) var(--ease);
 }
-.reveal.is-in { opacity: 1; transform: none; }
+.js-motion .reveal.is-in { opacity: 1; transform: none; }
 
 /* Staggering is capped: past a handful of children the delay stops
    reading as choreography and starts reading as lag. */
@@ -307,8 +312,8 @@ section.tinted { background: var(--canvas); }
 .reveal[data-delay="3"] { transition-delay: 210ms; }
 .reveal[data-delay="4"] { transition-delay: 280ms; }
 
-.bar-fill { transition: width var(--t-slow) var(--ease); }
-.is-in .bar-fill, .bar-fill.is-in { width: var(--w, 0); }
+.js-motion .bar-fill { width: 0; transition: width var(--t-slow) var(--ease); }
+.js-motion .is-in .bar-fill, .js-motion .bar-fill.is-in { width: var(--w, 0); }
 
 .lift { transition: transform var(--t-base) var(--ease), box-shadow var(--t-base) var(--ease), border-color var(--t-base) var(--ease); }
 .lift:hover { transform: translateY(-2px); box-shadow: 0 10px 24px rgba(1, 38, 82, 0.08); border-color: var(--accent); }
@@ -324,8 +329,15 @@ section.tinted { background: var(--canvas); }
     transition-duration: 0.001ms !important;
     scroll-behavior: auto !important;
   }
-  .reveal { opacity: 1; transform: none; }
-  .bar-fill { width: var(--w, 0); }
+  .js-motion .reveal { opacity: 1; transform: none; }
+  .js-motion .bar-fill { width: var(--w, 0); }
+}
+
+/* Printing, and any capture that does not scroll, must still get the page. */
+@media print {
+  .js-motion .reveal { opacity: 1 !important; transform: none !important; }
+  .js-motion .bar-fill { width: var(--w, 0) !important; }
+  .nav-head { position: static; }
 }
 
 /* ---------- 11. helper popover (? affordance) ---------- */
