@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 320" width="1280" height="320" role="img"
+     aria-label="Fraud Spike Detector — Catch the fraud. Count what it costs.">
+  <defs>
+    <style>
+      .wm  { font: 800 74px "Archivo", "Helvetica Neue", Arial, sans-serif; letter-spacing: -2px; }
+      .tag { font: 500 26px "Archivo", "Helvetica Neue", Arial, sans-serif; }
+      .sub { font: 400 17px "Archivo", "Helvetica Neue", Arial, sans-serif; }
+    </style>
+  </defs>
+
+  <rect width="1280" height="320" fill="#012652"/>
+
+  <!-- the mark: a flat baseline of ordinary activity, broken by one spike -->
+  <g transform="translate(96 96) scale(4)" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M0 22 H8 M24 22 H32" stroke="#FFFFFF" stroke-opacity="0.45" stroke-width="2.6"/>
+    <path d="M8 22 L16 4 L24 22" stroke="#0D94FB" stroke-width="3.6"/>
+  </g>
+
+  <text class="wm" x="264" y="150" fill="#FFFFFF">Fraud Spike Detector</text>
+  <text class="tag" x="268" y="196" fill="#FFFFFF" fill-opacity="0.82">Catch the fraud.</text>
+  <text class="tag" x="450" y="196" fill="#0D94FB">Count what it costs.</text>
+  <text class="sub" x="268" y="238" fill="#FFFFFF" fill-opacity="0.55">
+    Explainable fraud-spike detection for card payments, with a human on every decision.
+  </text>
+
+  <rect x="0" y="316" width="1280" height="4" fill="#0D94FB"/>
+</svg>

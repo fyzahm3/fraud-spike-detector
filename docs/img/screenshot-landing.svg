@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 500" width="800" height="500"
+     role="img" aria-label="Overview — screenshot pending">
+  <rect width="800" height="500" fill="#012652"/>
+  <rect x="1" y="1" width="798" height="498" fill="none" stroke="#0D94FB" stroke-opacity="0.35"
+        stroke-width="2" stroke-dasharray="8 6"/>
+  <g transform="translate(360 150) scale(2.5)" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M0 22 H8 M24 22 H32" stroke="#FFFFFF" stroke-opacity="0.4" stroke-width="2.6"/>
+    <path d="M8 22 L16 4 L24 22" stroke="#0D94FB" stroke-width="3.6"/>
+  </g>
+  <text x="400" y="290" text-anchor="middle" fill="#FFFFFF"
+        font-family="Archivo, Helvetica Neue, Arial, sans-serif" font-size="30" font-weight="800">Overview</text>
+  <text x="400" y="322" text-anchor="middle" fill="#FFFFFF" fill-opacity="0.62"
+        font-family="Archivo, Helvetica Neue, Arial, sans-serif" font-size="15">The cost trade, stated first</text>
+  <text x="400" y="372" text-anchor="middle" fill="#0D94FB"
+        font-family="Archivo, Helvetica Neue, Arial, sans-serif" font-size="13" font-weight="600"
+        letter-spacing="1.4">SCREENSHOT PENDING &#183; SEE THE LIVE DEMO</text>
+</svg>

@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Fraud spike detector">
+  <!--
+    An original mark for this project: a flat baseline of ordinary payment
+    activity, interrupted by one sharp spike. The baseline is quiet, the spike
+    is the accent - which is the whole thesis of the system in one shape.
+    Drawn on a 32px grid with heavy strokes so it survives a 16px favicon.
+  -->
+  <rect width="32" height="32" rx="7" fill="#012652"/>
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M5 21.5 H11.5 M20.5 21.5 H27" stroke="#FFFFFF" stroke-opacity="0.5" stroke-width="2.2"/>
+    <path d="M11.5 21.5 L16 7.5 L20.5 21.5" stroke="#0D94FB" stroke-width="3.2"/>
+  </g>
+</svg>
