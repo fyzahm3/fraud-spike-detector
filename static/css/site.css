@@ -611,3 +611,23 @@ section.tinted { background: var(--canvas); }
 @media (prefers-reduced-motion: reduce) {
     .toast, .toast.is-out { animation: none; }
 }
+
+/* --- gateway model on a live item ------------------------------------------
+   A real score from a real model, shown with the two facts that keep it
+   honest: how few features it had, and how it measures against the full
+   model on the same held-out data. */
+.brief-score-gateway { color: var(--accent-deep); }
+
+.gateway-panel {
+    margin: 0 var(--s6) var(--s4);
+    padding: var(--s4);
+    border: 1px solid var(--line);
+    border-left: 2px solid var(--accent);
+    border-radius: var(--radius);
+    background: var(--canvas);
+}
+.gateway-title { margin: 0 0 var(--s2); font-size: 13px; font-weight: 700; }
+.gateway-body { margin: 0 0 var(--s3); font-size: 12px; line-height: 1.55; color: var(--muted); max-width: 84ch; }
+.gwrows { display: grid; grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr)); gap: 0 var(--s8); border-top: 1px solid var(--line); }
+.gwrows .verdict-row { padding: var(--s2) 0; }
+.factors-gateway { color: var(--accent-deep); font-weight: 600; }

@@ -96,9 +96,18 @@ class ReviewQueue:
                     summary_text TEXT NOT NULL,
                     top_factors_json TEXT NOT NULL,
                     status TEXT NOT NULL DEFAULT 'pending',
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    gateway_score REAL
                 );
             """)
+
+            # Additive migration for databases created before the gateway model
+            # existed — the committed demo snapshot among them. Nullable, so
+            # every existing row keeps meaning exactly what it meant: no
+            # gateway score was computed for it.
+            existing = {row[1] for row in conn.execute("PRAGMA table_info(review_queue);")}
+            if "gateway_score" not in existing:
+                conn.execute("ALTER TABLE review_queue ADD COLUMN gateway_score REAL;")
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS audit_log (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -130,8 +139,8 @@ class ReviewQueue:
                 INSERT INTO review_queue (
                     entity_id, flagged_type, model_score, confidence,
                     estimated_fp_cost, recommended_action, summary_text,
-                    top_factors_json, status
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending');
+                    top_factors_json, gateway_score, status
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending');
             """, (
                 brief.entity_id,
                 brief.flagged_type,
@@ -141,6 +150,7 @@ class ReviewQueue:
                 brief.recommended_action,
                 brief.summary_text,
                 factors_json,
+                getattr(brief, "gateway_score", None),
             ))
             return int(cur.lastrowid)
 
@@ -181,7 +191,7 @@ class ReviewQueue:
         sql = """
             SELECT id, entity_id, flagged_type, model_score, confidence,
                    estimated_fp_cost, recommended_action, summary_text,
-                   top_factors_json, status, created_at
+                   top_factors_json, gateway_score, status, created_at
             FROM review_queue
             WHERE status = ?
             ORDER BY model_score DESC, created_at ASC, id ASC

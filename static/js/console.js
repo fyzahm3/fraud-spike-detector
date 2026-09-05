@@ -121,7 +121,7 @@
         if (flaggedType === UNSCORED_TYPE) {
             return el("span", {
                 className: "tag tag-unscored",
-                text: "Live ingestion · not scored"
+                text: "Live ingestion · gateway score only"
             });
         }
         var isSpike = flaggedType === "spike";
@@ -137,6 +137,13 @@
             : factor.value;
         /* A live-ingested item's fields are observations, not model inputs,
            and must not read as risk evidence in either direction. */
+        if (factor.direction === "gateway_model_input") {
+            return el("tr", {}, [
+                el("td", { className: "factors-feature", text: factor.feature }),
+                el("td", { className: "factors-value", text: value }),
+                el("td", { className: "factors-gateway", text: "Gateway model input" })
+            ]);
+        }
         if (factor.direction === "not_a_model_input") {
             return el("tr", {}, [
                 el("td", { className: "factors-feature", text: factor.feature }),
@@ -181,7 +188,7 @@
             el("caption", {
                 text: scored
                     ? "Top contributing factors"
-                    : "Observed payload fields \u2014 none is a model feature"
+                    : "Observed payload fields, and which the gateway model used"
             }),
             head,
             body
@@ -260,15 +267,28 @@
         /* Where a scored item shows four decimal places, this shows words. The
            server already sends model_score as null for these, so there is no
            number here to accidentally format. */
-        var scoreblock = scored
-            ? el("div", { className: "brief-scoreblock" }, [
-                  el("span", { className: "brief-score num", text: item.model_score.toFixed(4) }),
-                  el("span", { className: "brief-score-label", text: "Risk score" })
-              ])
-            : el("div", { className: "brief-scoreblock" }, [
-                  el("span", { className: "brief-score-none", text: "Not scored" }),
-                  el("span", { className: "brief-score-label", text: "No model score exists" })
-              ]);
+        var scoreblock;
+        if (scored) {
+            scoreblock = el("div", { className: "brief-scoreblock" }, [
+                el("span", { className: "brief-score num", text: item.model_score.toFixed(4) }),
+                el("span", { className: "brief-score-label", text: "Risk score \u00b7 full model" })
+            ]);
+        } else if (item.gateway) {
+            /* A real score from a real model — the gateway one — labelled so it
+               can never be read as the full model's number. */
+            scoreblock = el("div", { className: "brief-scoreblock" }, [
+                el("span", {
+                    className: "brief-score brief-score-gateway num",
+                    text: item.gateway.score.toFixed(4)
+                }),
+                el("span", { className: "brief-score-label", text: "Gateway score" })
+            ]);
+        } else {
+            scoreblock = el("div", { className: "brief-scoreblock" }, [
+                el("span", { className: "brief-score-none", text: "Not scored" }),
+                el("span", { className: "brief-score-label", text: "No model score exists" })
+            ]);
+        }
 
         var head = el("div", { className: "brief-hd" }, [
             el("div", { className: "brief-id" }, identity),
@@ -283,11 +303,42 @@
         ]);
         summary.appendChild(text(item.summary_text));
 
+        var gatewayPanel = null;
+        if (!scored && item.gateway) {
+            var g = item.gateway;
+            var rows = el("div", { className: "gwrows" }, [
+                scoreRow("Gateway decision", g.score >= g.threshold
+                    ? "Above threshold \u2014 send for review"
+                    : "Below threshold \u2014 no action indicated"),
+                scoreRow("Gateway threshold", g.threshold.toFixed(4)),
+                scoreRow("Features available now", String(g.n_features)),
+                scoreRow("Gateway AUC-PR", g.auc_pr.toFixed(4)),
+                scoreRow("Full model AUC-PR", g.full_model_auc_pr.toFixed(4)
+                    + " (on " + g.full_model_n_features + " features)")
+            ]);
+            gatewayPanel = el("div", { className: "gateway-panel" }, [
+                el("p", { className: "gateway-title", text: "Scored at authorization, by the gateway model" }),
+                el("p", {
+                    className: "gateway-body",
+                    text: "At the instant this payment was authorized it had no history yet " +
+                          "\u2014 no device graph, no email-cluster signal, none of the entity " +
+                          "relationships the full model draws most of its strength from. This " +
+                          "score comes from a model trained on the same dataset restricted to " +
+                          "the fields a webhook actually carries, and it is correspondingly " +
+                          "weaker. The gap between the two figures below is the measured cost " +
+                          "of the history that has not accumulated yet."
+                }),
+                rows
+            ]);
+        }
+
         return el("article", {
             className: "brief" + (scored ? "" : " brief-unscored"),
             id: "item-" + item.id,
             attrs: { "aria-label": "Brief " + item.id }
-        }, [head, summary, factorsTable(item.top_factors, scored), actionBar(item)]);
+        }, gatewayPanel
+            ? [head, summary, gatewayPanel, factorsTable(item.top_factors, scored), actionBar(item)]
+            : [head, summary, factorsTable(item.top_factors, scored), actionBar(item)]);
     }
 
     /* --- audit trail ----------------------------------------------------- */
@@ -701,7 +752,15 @@
     }
 
     function showAuditTrail(flashQueueId) {
-        showView("audit");
+        /* The audit trail lives on the review queue. Anywhere else — the live
+           ingestion page, for one — the honest thing is to go there rather than
+           silently do nothing. */
+        if (!showView("audit")) {
+            var target = "/demo#audit";
+            if (flashQueueId !== undefined) { target += "-" + flashQueueId; }
+            window.location.href = target;
+            return;
+        }
         var panel = byId("view-audit");
         if (panel) { panel.scrollIntoView({ block: "start" }); }
         if (flashQueueId === undefined) { return; }
@@ -959,7 +1018,16 @@
 
     /* --- view switching --------------------------------------------------- */
 
+    /* Guarded on every element: the tabs exist on the review queue and nowhere
+       else, and this used to be called from the live page too — where it threw
+       on the first null and killed the click. */
+    function hasTabs() {
+        return !!(byId("tab-pending") && byId("tab-audit")
+                  && byId("view-pending") && byId("view-audit"));
+    }
+
     function showView(name) {
+        if (!hasTabs()) { return false; }
         state.view = name;
         [["pending", "tab-pending", "view-pending"], ["audit", "tab-audit", "view-audit"]]
             .forEach(function (entry) {
@@ -967,6 +1035,7 @@
                 byId(entry[1]).setAttribute("aria-selected", active ? "true" : "false");
                 byId(entry[2]).hidden = !active;
             });
+        return true;
     }
 
     /* --- contextual help --------------------------------------------------
@@ -1129,8 +1198,15 @@
     initScorer();
 
     if (byId("pending-container")) {
-        showView("pending");
-        load();
+        /* Arriving from another page's "view the audit trail" link. */
+        var hash = window.location.hash || "";
+        var wantsAudit = hash.indexOf("#audit") === 0;
+        showView(wantsAudit ? "audit" : "pending");
+        load().then(function () {
+            if (!wantsAudit) { return; }
+            var flashId = hash.split("-")[1];
+            showAuditTrail(flashId === undefined ? undefined : Number(flashId));
+        });
     } else if (byId("live-items-container")) {
         loadLiveItems();
     }

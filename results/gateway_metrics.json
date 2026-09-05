@@ -1,0 +1,39 @@
+{
+  "model": "gateway",
+  "n_features": 7,
+  "feature_names": [
+    "TransactionAmt",
+    "hour_of_day",
+    "day_of_week",
+    "card4",
+    "card6",
+    "P_emaildomain",
+    "addr2"
+  ],
+  "threshold": 0.6403100933089401,
+  "best_iteration": 17,
+  "split": "held-out test, chronological",
+  "metrics": {
+    "threshold": 0.6403100933089401,
+    "precision": 0.19722222222222222,
+    "recall": 0.29938371715861173,
+    "f1": 0.23779466701017649,
+    "auc_roc": 0.7484785804019657,
+    "auc_pr": 0.1429690097791216,
+    "confusion_matrix": {
+      "tn": 81741,
+      "fp": 3757,
+      "fn": 2160,
+      "tp": 923
+    },
+    "n_flagged": 4680,
+    "n_rows": 88581,
+    "false_positive_count": 3757,
+    "legitimate_value_disrupted": 300941.93200000003,
+    "true_positive_count": 923,
+    "fraud_value_caught": 68064.063,
+    "missed_count": 2160,
+    "fraud_value_missed": 401544.458,
+    "caught_to_disrupted_ratio": 0.2261700871914386
+  }
+}

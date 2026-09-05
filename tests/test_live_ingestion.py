@@ -221,14 +221,59 @@ def test_live_demo_item_has_no_fabricated_score(client):
 
     # --- brief text ---
     summary = item["summary_text"]
-    assert "not scored" in summary.lower() or "no risk score" in summary.lower()
-    assert "feature space" in summary.lower()
+    assert "no score from the full fraud model" in summary.lower()
+    assert "gateway" in summary.lower()
 
-    # --- factors: observations, never risk evidence ---
+    # --- factors: observations or gateway inputs, never risk evidence ---
     assert item["top_factors"], "the item should still show what was observed"
     for factor in item["top_factors"]:
-        assert factor["direction"] == "not_a_model_input", factor
+        assert factor["direction"] in {"not_a_model_input", "gateway_model_input"}, factor
+        # Neither model reports a per-field direction for a live payment, so
+        # implying one would be evidence the system does not have.
         assert factor["direction"] not in {"increases_risk", "decreases_risk"}
+
+
+def test_gateway_score_is_never_presented_as_the_full_models(client):
+    """Two models, two fields, and the weaker one never wears the other's label.
+
+    The gateway model scores what is knowable at authorization. It is a real
+    model on real features, but it is not the full model, and the wire format
+    has to make that impossible to confuse: model_score stays null, the gateway
+    number lives in its own field, and it never travels without the two facts
+    that qualify it — how few features it had, and how it measures against the
+    full model on the same held-out split.
+    """
+    pytest.importorskip("xgboost", reason="gateway scoring needs the ML stack")
+    if not Path("artifacts/gateway_model.json").exists():
+        pytest.skip("gateway model not trained in this checkout")
+
+    c, db_path = client
+    raw, signature = _signed(_payload("pay_Gateway"))
+    assert _post_webhook(c, raw, signature, event_id="evt_gw").status_code == 200
+
+    item = next(
+        i for i in c.get("/api/pending").get_json()
+        if i["flagged_type"] == LIVE_DEMO_FLAGGED_TYPE
+    )
+
+    # The full model's score is still absent, and still null on the wire.
+    assert item["scored"] is False
+    assert item["model_score"] is None
+
+    gateway = item.get("gateway")
+    assert gateway is not None, "no gateway score was attached"
+    assert 0.0 <= gateway["score"] <= 1.0
+    assert gateway["score"] != item["model_score"]
+
+    # The qualifying context travels with the number, always.
+    assert 0.0 < gateway["auc_pr"] < 1.0
+    assert 0.0 < gateway["full_model_auc_pr"] < 1.0
+    assert gateway["auc_pr"] < gateway["full_model_auc_pr"], (
+        "the gateway model is expected to be weaker; if it is not, the feature "
+        "restriction is not doing what it claims"
+    )
+    assert gateway["n_features"] < gateway["full_model_n_features"]
+    assert 0.0 < gateway["threshold"] < 1.0
 
 
 def test_live_demo_brief_never_calls_the_llm(monkeypatch):
@@ -312,9 +357,15 @@ def test_client_renders_unscored_items_on_their_own_branch():
     """
     script = Path("static/js/console.js").read_text()
     assert 'var UNSCORED_TYPE = "live_demo_unscored";' in script
-    assert "Live ingestion · not scored" in script
-    assert "Not scored" in script
+    assert "Live ingestion · gateway score only" in script
+    assert "Not scored" in script, "the no-model-at-all branch must still exist"
     assert "not_a_model_input" in script
+    # The gateway number is labelled as its own thing, never as "Risk score".
+    assert "Gateway score" in script
+    # The separator is written as an escape in the source, so match the halves
+    # rather than the rendered character.
+    assert "Risk score" in script and "full model" in script
+    assert "Gateway AUC-PR" in script and "Full model AUC-PR" in script
     # The mean-score tile must not average a sentinel into a headline number.
     assert "items.filter(isScored)" in script
 

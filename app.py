@@ -373,6 +373,37 @@ def _require_basic_auth() -> Response | None:
         {"WWW-Authenticate": 'Basic realm="Fraud-Spike Review Queue"'},
     )
 
+_GATEWAY_CONTEXT: dict = {}
+
+
+def gateway_context() -> dict:
+    """Measured facts about the gateway model, cached per process.
+
+    Served alongside every gateway score so the number never appears without
+    the two things that qualify it: how many features it had, and how it
+    actually performs against the full model on the same held-out data.
+    """
+    if _GATEWAY_CONTEXT:
+        return _GATEWAY_CONTEXT
+    context: dict = {}
+    try:
+        with open(RESULTS_DIR / "gateway_metrics.json", encoding="utf-8") as handle:
+            gateway = json.load(handle)
+        context["threshold"] = gateway.get("threshold")
+        context["auc_pr"] = (gateway.get("metrics") or {}).get("auc_pr")
+        context["n_features"] = gateway.get("n_features")
+    except (OSError, ValueError):
+        pass
+    try:
+        with open(RESULTS_DIR / "phase_comparison.json", encoding="utf-8") as handle:
+            context["full_model_auc_pr"] = json.load(handle)["graph"]["auc_pr"]
+    except (OSError, ValueError, KeyError):
+        pass
+    context.setdefault("full_model_n_features", 443)
+    _GATEWAY_CONTEXT.update(context)
+    return _GATEWAY_CONTEXT
+
+
 def _serialize_item(item: dict) -> dict:
     """Shape a queue row for the API, with unscored items marked as such.
 
@@ -391,8 +422,23 @@ def _serialize_item(item: dict) -> dict:
     out = dict(item)
     scored = out.get("flagged_type") != LIVE_DEMO_FLAGGED_TYPE
     out["scored"] = scored
+
+    gateway_score = out.pop("gateway_score", None)
     if not scored:
         out["model_score"] = None
+        # The gateway model's score travels in its own field with its own
+        # measured performance attached, so the client cannot render it in the
+        # place where a full-model score would go, and cannot present it without
+        # the context that makes it honest.
+        if gateway_score is not None:
+            out["gateway"] = {
+                "score": float(gateway_score),
+                "threshold": gateway_context().get("threshold"),
+                "auc_pr": gateway_context().get("auc_pr"),
+                "full_model_auc_pr": gateway_context().get("full_model_auc_pr"),
+                "n_features": gateway_context().get("n_features"),
+                "full_model_n_features": gateway_context().get("full_model_n_features"),
+            }
     return out
 
 
@@ -415,6 +461,7 @@ EVIDENCE_FILES = {
     "phase_comparison": "phase_comparison.json",
     "split_manifest": "split_manifest.json",
     "pipeline_run": "pipeline_run_summary.json",
+    "gateway": "gateway_metrics.json",
 }
 
 

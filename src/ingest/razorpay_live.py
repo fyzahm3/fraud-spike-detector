@@ -74,16 +74,19 @@ UNSCORED_MODEL_SCORE = -1.0
 #: accurately, and an improvised paraphrase is exactly the failure mode to
 #: avoid. src/explain/risk_brief.py is not called for these items at all.
 LIVE_DEMO_SUMMARY = (
-    "Live ingestion proof-of-concept. This item is a real Razorpay test-mode "
-    "payment received over a signature-verified webhook, and it is NOT scored "
-    "by the fraud model. No risk score is assigned because the payment payload "
-    "does not contain the model's feature space: the model was trained on the "
-    "IEEE-CIS schema (~430 engineered features, including the masked V1-V339 "
-    "block and causal graph features derived from an entity's transaction "
-    "history), and a webhook payload carries only an amount, a currency, a "
-    "payment method and a timestamp. Any number shown here would describe "
-    "placeholder values rather than this payment, so none is shown. This item "
-    "demonstrates ingestion and human review, not detection."
+    "Live ingestion. This item is a real Razorpay test-mode payment received "
+    "over a signature-verified webhook. It carries NO score from the full fraud "
+    "model, and one from the gateway model. The distinction is the point: at "
+    "the instant a payment is authorized it has no history yet — no device "
+    "graph, no email-cluster signal, none of the accumulated entity "
+    "relationships that the full model draws most of its strength from. Those "
+    "443 features do not exist for this payment and padding them would describe "
+    "the padding, not the payment. The gateway model is trained on the same "
+    "real dataset restricted to the handful of fields a webhook actually "
+    "carries, and it is correspondingly weaker: AUC-PR 0.1430 against the full "
+    "model's 0.6732 on the same held-out data. That gap is the measured cost of "
+    "the history that has not accumulated yet, which is why production fraud "
+    "systems run a fast pass at authorization and a richer re-score later."
 )
 
 RAZORPAY_ORDERS_URL = "https://api.razorpay.com/v1/orders"
@@ -300,6 +303,13 @@ def extract_event_id(headers: Any, payload: dict[str, Any]) -> str:
     return str(entity.get("id", "")).strip()
 
 
+def _email_domain(email: object) -> str:
+    """Domain part only. The address itself is never stored or displayed."""
+    if not isinstance(email, str) or "@" not in email:
+        return "not supplied"
+    return email.rsplit("@", 1)[1].strip().lower() or "not supplied"
+
+
 def _payment_entity(payload: dict[str, Any]) -> dict[str, Any]:
     entity = (
         payload.get("payload", {})
@@ -328,26 +338,58 @@ def build_live_demo_brief(payload: dict[str, Any]) -> RiskBrief:
     feature this model was trained on.
     """
     entity = _payment_entity(payload)
+
+    # The gateway model, if this deployment has it. Absence is not fatal: the
+    # item is still ingested and reviewed, simply without the extra score. It is
+    # never replaced by a default — a number without a model behind it is the
+    # one thing this path must not produce.
+    gateway = None
+    try:
+        from src.serve.gateway import score_payment
+        gateway = score_payment(entity)
+    except Exception:  # model absent, or ML stack not installed on this tier
+        gateway = None
+
     amount_paise = entity.get("amount", 0)
     try:
         amount_display = f"{int(amount_paise) / 100:.2f}"
     except (TypeError, ValueError):
         amount_display = "unknown"
 
+    # Live payments are genuinely INR, so they are shown in rupees. Dataset
+    # figures elsewhere on the site stay in their own units — IEEE-CIS is US
+    # data — rather than being relabelled to match.
+    currency = str(entity.get("currency", "") or "")
+    amount_text = ("\u20b9" + amount_display) if currency == "INR" \
+        else f"{amount_display} {currency}".strip()
+
+    card = entity.get("card") or {}
     observed = [
         ("payment_id", str(entity.get("id", "unknown"))),
         ("order_id", str(entity.get("order_id", "unknown"))),
-        ("amount", f"{amount_display} {entity.get('currency', '')}".strip()),
+        ("amount", amount_text),
         ("method", str(entity.get("method", "unknown"))),
+        ("card_network", str(card.get("network") or "not supplied")),
+        ("card_type", str(card.get("type") or "not supplied")),
+        ("email_domain", _email_domain(entity.get("email"))),
         ("event", str(payload.get("event", "unknown"))),
     ]
+    # Which observed fields the gateway model actually consumed, so the table
+    # distinguishes a model input from a bare payload field rather than calling
+    # everything one or the other.
+    gateway_fields = {"amount", "card_network", "card_type", "email_domain"}
     factors = [
         ContributingFactor(
             feature=name,
             value=value,
-            # Not "increases_risk"/"decreases_risk": these are observed payload
-            # fields, not model inputs, and must not read as risk evidence.
-            direction="not_a_model_input",
+            # Never "increases_risk"/"decreases_risk": neither model reports a
+            # per-field direction here, and implying one would be evidence the
+            # system does not have.
+            direction=(
+                "gateway_model_input"
+                if (gateway is not None and name in gateway_fields)
+                else "not_a_model_input"
+            ),
         )
         for name, value in observed
     ]
@@ -361,4 +403,5 @@ def build_live_demo_brief(payload: dict[str, Any]) -> RiskBrief:
         estimated_fp_cost=0.0,
         recommended_action="monitor",
         summary_text=LIVE_DEMO_SUMMARY,
+        gateway_score=None if gateway is None else gateway["gateway_score"],
     )

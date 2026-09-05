@@ -29,6 +29,9 @@ data/raw/
 # the deployed application, not a local build product.
 !/artifacts/graph_model.json
 !/artifacts/graph_meta.json
+# ...and the gateway model, which scores live payments at authorization.
+!/artifacts/gateway_model.json
+!/artifacts/gateway_meta.json
 
 # ---- Python artifacts ----
 __pycache__/

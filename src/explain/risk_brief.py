@@ -31,7 +31,15 @@ class ContributingFactor:
     # "not_a_model_input" is used only by src/ingest: a live-ingested payment
     # carries observed payload fields, which are not features this model was
     # trained on and must not be presented as risk evidence in either direction.
-    direction: Literal["increases_risk", "decreases_risk", "not_a_model_input"]
+    direction: Literal[
+        "increases_risk", "decreases_risk",
+        "not_a_model_input",
+        # A field the GATEWAY model consumed. Distinct from the two risk
+        # directions because it says what the value was used for, not which way
+        # it pushed the score, and distinct from not_a_model_input because it
+        # was in fact a model input — just not one of the full model's 443.
+        "gateway_model_input",
+    ]
 
 
 @dataclass
@@ -47,6 +55,13 @@ class RiskBrief:
     estimated_fp_cost: float                            # from cost_metrics-style calc
     recommended_action: Literal["hold_for_review", "monitor", "dismiss_low_priority"]  # enum only — never free text
     summary_text: str                                    # natural language summary from LLM
+
+    # Set only for live-ingested items, by src/ingest. It is the GATEWAY
+    # model's score — a separate, deliberately weaker model trained on the
+    # handful of fields a payment webhook actually carries — and it is never
+    # the same number as model_score, which belongs to the full model. Two
+    # models, two fields, so neither can be mistaken for the other.
+    gateway_score: float | None = None
 
 
 def generate_risk_brief(

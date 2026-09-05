@@ -131,6 +131,27 @@ Pick one of 17 real transactions from the held-out test split and the trained XG
 
 ---
 
+## The Gateway Model — what is knowable at authorization
+
+The full model reaches **AUC-PR 0.6732** on 443 features, and most of that strength comes from an entity's *accumulated history*: device graphs, email-cluster co-occurrence, rolling velocity. At the instant a payment is authorized, none of it exists. The webhook carries an amount, a card network, a card type, an email domain and a timestamp.
+
+So a second model is trained on the **same real dataset and the same chronological split**, restricted to exactly those 7 fields:
+
+| Metric | Gateway (7 features) | Full model (443 features) |
+|---|---|---|
+| AUC-PR | **0.1430** | **0.6732** |
+| AUC-ROC | 0.7485 | 0.9364 |
+| Precision | 0.1972 | 0.7106 |
+| Recall | 0.2994 | 0.5855 |
+
+That 4.7× gap in AUC-PR is not a disappointment to be hidden. It is the **measured cost of the history that has not accumulated yet**, and it is precisely why production fraud systems run a fast gateway pass at authorization and a richer re-score once the entity history exists. Reproduce with `python scripts/train_gateway_model.py`; metrics land in `results/gateway_metrics.json`.
+
+**What this changes on the live page.** An ingested payment is no longer scoreless. It carries a real gateway score, computed by a real model from real fields — and it still carries **no** full-model score, because those 443 features genuinely do not exist for it. Two models, two fields, two labels: `model_score` stays null on the wire, the gateway number travels in its own `gateway` object, and it never appears without its own AUC-PR and feature count beside it.
+
+**The honest caveat, stated on the card itself.** The gateway model is trained on IEEE-CIS US card data in dollars. An INR test-mode payment sits outside its training distribution, so the score is a real computation whose evidential weight is limited — which the page says rather than assumes. Live payments are shown in **₹** because they genuinely are rupees; dataset figures stay in their own units.
+
+---
+
 ## Defense-Only Policy
 
 This system is strictly **defense-only by design**:
@@ -161,7 +182,7 @@ cp .env.example .env
 # Edit .env and insert your GEMINI_API_KEY
 ```
 
-### 2. Run Test Suite (134/134 Passing)
+### 2. Run Test Suite (136/136 Passing)
 ```bash
 pytest
 ```

@@ -176,10 +176,84 @@
 </section>
 {% endif %}
 
+{% set gw = evidence.gateway %}
+{% if gw and pc %}
+<section id="gateway">
+  <div class="wrap">
+    <p class="eyebrow reveal">02 &mdash; What is knowable at authorization</p>
+    <div class="split">
+      <div class="reveal">
+        <h2>The same dataset, restricted to what a payment rail can actually tell you.</h2>
+        <p>The full model draws most of its strength from an entity&rsquo;s accumulated history
+           &mdash; device graphs, email-cluster signal, rolling velocity. At the instant a payment
+           is authorized none of that exists yet. A webhook carries an amount, a card network, a
+           card type, an email domain and a timestamp.</p>
+        <p>So a second model was trained on the same real data and the same chronological split,
+           restricted to exactly those {{ gw.n_features }} fields. It is much weaker, and the gap
+           is the measured cost of the history that has not accumulated yet &mdash; which is why
+           production fraud systems run a fast pass at authorization and a richer re-score later.</p>
+        <p class="src"><code>results/gateway_metrics.json</code></p>
+      </div>
+      <div class="reveal" data-delay="1">
+        <div class="table-wrap">
+          <table class="table">
+            <caption>Both models, same held-out test split</caption>
+            <thead>
+              <tr>
+                <th scope="col">Metric</th>
+                <th scope="col" class="n">Gateway<br>({{ gw.n_features }} features)</th>
+                <th scope="col" class="n">Full model<br>(443 features)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr class="total">
+                <td>AUC-PR {{ h.help('auc_pr', '-gw') }}</td>
+                <td class="n">{{ '%.4f'|format(gw.metrics.auc_pr) }}</td>
+                <td class="n"><b>{{ '%.4f'|format(pc.graph.auc_pr) }}</b></td>
+              </tr>
+              <tr>
+                <td>AUC-ROC</td>
+                <td class="n">{{ '%.4f'|format(gw.metrics.auc_roc) }}</td>
+                <td class="n"><b>{{ '%.4f'|format(pc.graph.auc_roc) }}</b></td>
+              </tr>
+              <tr>
+                <td>Precision</td>
+                <td class="n">{{ '%.4f'|format(gw.metrics.precision) }}</td>
+                <td class="n"><b>{{ '%.4f'|format(pc.graph.precision) }}</b></td>
+              </tr>
+              <tr>
+                <td>Recall</td>
+                <td class="n">{{ '%.4f'|format(gw.metrics.recall) }}</td>
+                <td class="n"><b>{{ '%.4f'|format(pc.graph.recall) }}</b></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="bar-row" style="margin-top:24px">
+          <span>Gateway &mdash; AUC-PR</span>
+          <span class="bar-track"><span class="bar-fill dim" style="--w:{{ '%.1f'|format(gw.metrics.auc_pr * 100) }}%"></span></span>
+          <span class="bar-val num">{{ '%.4f'|format(gw.metrics.auc_pr) }}</span>
+        </div>
+        <div class="bar-row">
+          <span>Full model &mdash; AUC-PR</span>
+          <span class="bar-track"><span class="bar-fill" style="--w:{{ '%.1f'|format(pc.graph.auc_pr * 100) }}%"></span></span>
+          <span class="bar-val num">{{ '%.4f'|format(pc.graph.auc_pr) }}</span>
+        </div>
+        <p class="src">The gateway model is what scores a live payment on the
+           <a href="{{ url_for('live_page') }}">ingestion page</a>. It is trained on US card data,
+           so a payment on another rail or in another currency sits outside its training
+           distribution &mdash; the score is really computed, and what it is evidence of is stated
+           beside it.</p>
+      </div>
+    </div>
+  </div>
+</section>
+{% endif %}
+
 <!-- live scoring -->
 <section class="tinted" id="live-scoring">
   <div class="wrap">
-    <p class="eyebrow reveal">02 &mdash; Run the model</p>
+    <p class="eyebrow reveal">03 &mdash; Run the model</p>
     <div class="split">
       <div class="reveal">
         <h2>Everything above is a measurement. This is the model.</h2>
@@ -218,7 +292,7 @@
 {% if split %}
 <section>
   <div class="wrap">
-    <p class="eyebrow reveal">03 &mdash; Dataset and split</p>
+    <p class="eyebrow reveal">04 &mdash; Dataset and split</p>
     <div class="split">
       <div class="reveal">
         <h2>Chronological split, not random.</h2>
@@ -265,7 +339,7 @@
 {% if run %}
 <section class="tinted" id="coverage">
   <div class="wrap">
-    <p class="eyebrow reveal">04 &mdash; End-to-end run</p>
+    <p class="eyebrow reveal">05 &mdash; End-to-end run</p>
     <h2 class="reveal" style="margin-bottom:24px">One pass of the full pipeline.</h2>
     <div class="kpis reveal">
       <div class="kpi">
@@ -296,7 +370,7 @@
 
 <section>
   <div class="wrap">
-    <p class="eyebrow reveal">05 &mdash; Methodology, stated as constraints</p>
+    <p class="eyebrow reveal">06 &mdash; Methodology, stated as constraints</p>
     <div class="split">
       <div class="reveal">
         <h2>What stops this from flattering itself.</h2>
@@ -331,7 +405,7 @@
 
 <section class="tinted">
   <div class="wrap">
-    <p class="eyebrow reveal">06 &mdash; Dataset study</p>
+    <p class="eyebrow reveal">07 &mdash; Dataset study</p>
     <div class="split">
       <div class="reveal">
         <h2>The gap this does not close. {{ h.help('dataset_gap') }}</h2>
